@@ -13,8 +13,8 @@ pinocchio-associated-token-account = "0.2.0"
 pinocchio-token-2022 = "0.1.0"
 
 [dev-dependencies]
-litesvm = "0.8.2"
-solana-keypair = "3.0"
+mollusk = "0.1.0"
+solana-keypair = "2.2.0"
 solana-pubkey = "3.0"
 solana-account = "3.0"
 solana-transaction = "3.0"
