@@ -1,5 +1,6 @@
 [package]
 name = "solana-gamble-onchain"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
