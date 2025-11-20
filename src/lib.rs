@@ -1,14 +1,13 @@
 #![allow(unexpected_cfgs)]
 
-use pinocchio::log::sol_log;
-
-use crate::utils::initialize_mint;
-
 use {
+    crate::utils::initialize_mint,
     bytemuck::{Pod, Zeroable},
     pinocchio::{
         account_info::AccountInfo,
-        entrypoint, msg,
+        entrypoint,
+        log::sol_log,
+        msg,
         program_error::ProgramError,
         pubkey::{find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
