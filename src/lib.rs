@@ -336,7 +336,7 @@ fn end_prediction(program_id: &Pubkey, accounts: &[AccountInfo], winner: u8) -> 
     let mut prediction_data = prediction_account.try_borrow_mut_data()?;
     let prediction = bytemuck::from_bytes_mut::<Prediction>(&mut prediction_data);
 
-    if *creator_account.key() != prediction.creator {
+    if creator_account.is_signer() && *creator_account.key() != prediction.creator {
         sol_log("Only the creator can settle the prediction");
         return Err(ProgramError::IllegalOwner);
     }
