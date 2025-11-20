@@ -3,12 +3,13 @@ use pinocchio::{
     instruction::Instruction, ProgramResult, account_info::AccountInfo, entrypoint, msg, program_error::ProgramError, pubkey::{Pubkey, find_program_address}, sysvars::{Sysvar, rent::Rent}
 };
 mod token_account;
+use pinocchio_token_2022::instructions::MintTo;
 use token_account::*;
 
 entrypoint!(process_instruction);
 
 // Define the data structures for the program
-#[repr(C)]
+#[repr(C, packed)]
 #[derive(Copy, Clone, Zeroable, Pod)]
 pub struct Bet {
     pub creator: Pubkey,
@@ -116,14 +117,15 @@ fn create_bet(program_id: &Pubkey, accounts: &[AccountInfo], _amount: u64) -> Pr
     let mint_a = find_program_address(&[bet_account, 1], program_id);
     let mint_b = find_program_address(&[bet_account, 2], program_id);
 
-    pinocchio_token_2022::MintTo {
+    MintTo {
         mint: mint_a,
-        destination: vault_a_account,
-        authority: bet_account,
         amount: 10_u64.pow(9) * 10_u64.pow(6),
+        account: todo!(),
+        mint_authority: todo!(),
+        token_program: todo!(),
     };
 
-    pinocchio_token_2022::instruction::MintTo {
+    :MintTo {
         mint: mint_b,
         destination: vault_b_account,
         authority: bet_account,
@@ -295,7 +297,7 @@ fn withdraw(accounts: &[AccountInfo]) -> ProgramResult {
     let vault_token = accounts.get(5).ok_or(ProgramError::InvalidAccountData)?;
     let token_program = accounts.get(6).ok_or(ProgramError::InvalidAccountData)?;
 
-    let token_amount = AtaAccessor::get_mint(signer_token_account.borrow_data_unchacked());
+    let token_amount = AtaAccessor::get_mint(signer_token_account.borrow_data_unchecked());
 
     let ix_take_token = Instruction{
         program_id: token_program.key() ,
