@@ -1349,9 +1349,35 @@ dependencies = [
 
 [[package]]
 name = "pinocchio"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c33b58567c11b07749cefbb8320ac023f3387c57807aeb8e3b1262501b6e9f0"
+
+[[package]]
+name = "pinocchio"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b971851087bc3699b001954ad02389d50c41405ece3548cbcafc88b3e20017a"
+
+[[package]]
+name = "pinocchio-associated-token-account"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b45fffdec0a1d05199b0f67b6b802be32ffc30a5fe29d222d7653865ca57401c"
+dependencies = [
+ "pinocchio 0.8.4",
+ "pinocchio-pubkey 0.2.4",
+]
+
+[[package]]
+name = "pinocchio-pubkey"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c6b20fcebc172c3cd3f54114b0241b48fa8e30893ced2eb4927aaba5e3a0ba5"
+dependencies = [
+ "five8_const 0.1.4",
+ "pinocchio 0.8.4",
+]
 
 [[package]]
 name = "pinocchio-pubkey"
@@ -1360,18 +1386,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb0225638cadcbebae8932cb7f49cb5da7c15c21beb19f048f05a5ca7d93f065"
 dependencies = [
  "five8_const 0.1.4",
- "pinocchio",
+ "pinocchio 0.9.2",
  "sha2-const-stable",
 ]
 
 [[package]]
 name = "pinocchio-system"
-version = "0.4.0"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4be2a6dad40b5e75d1486f021619c4bd504c34c1362c9b94ed7fa525b1cc63cc"
+checksum = "1f75423420ae70aa748cf611cab14cfd00af08d0d2d3d258cb0cf5e2880ec19c"
 dependencies = [
- "pinocchio",
- "pinocchio-pubkey",
+ "pinocchio 0.8.4",
+ "pinocchio-pubkey 0.2.4",
+]
+
+[[package]]
+name = "pinocchio-token-2022"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0aec08d3b6eddafdacc17bd5b7842050394b0199062a3cc20428f1c40c9dbe7d"
+dependencies = [
+ "pinocchio 0.9.2",
+ "pinocchio-pubkey 0.3.0",
 ]
 
 [[package]]
@@ -2161,8 +2197,10 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "litesvm",
- "pinocchio",
+ "pinocchio 0.8.4",
+ "pinocchio-associated-token-account",
  "pinocchio-system",
+ "pinocchio-token-2022",
  "solana-account",
  "solana-instruction",
  "solana-keypair",
