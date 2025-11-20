@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 use pinocchio::{
-    instruction::Instruction, ProgramResult, account_info::AccountInfo, entrypoint, msg, program_error::ProgramError, pubkey::{Pubkey, find_program_address}, sysvars::{Sysvar, rent::Rent}
+    instruction::Instruction, ProgramResult, account_info::AccountInfo, entrypoint, msg, program_error::ProgramError, pubkey::{Pubkey, find_program_address}
 };
 mod token_account;
 use pinocchio_token_2022::instructions::MintTo;
@@ -60,7 +60,7 @@ impl BetInstruction {
                 let winner = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
                 Self::SettleBet { winner: *winner }
             }
-            3 => Self::Withdraw,
+            3 => Self::Withdraw {},
             _ => return Err(ProgramError::InvalidInstructionData),
         })
     }
