@@ -1,5 +1,5 @@
 [workspace]
-members = ["onchain"]
+members = ["onchain", "cli", "server", "types"]
 resolver = "2"
 
 [workspace.package]
