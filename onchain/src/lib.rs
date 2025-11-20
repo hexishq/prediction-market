@@ -22,10 +22,10 @@ pub struct Bet {
 }
 
 pub enum BetInstruction {
-    CreateBet { amount: u64 },
-    PlaceBet { option: u8, amount: u64 }, // 1 for option a, 2 for option b
-    SettleBet { winner: u8 },             // 1 for option a, 2 for option b
-    Withdraw {},
+    CreatePrediction { amount: u64 }, // admin command
+    EndPrediction { winner: u8 }, // admin command
+    PlaceBet { option: u8, amount: u64 },
+    Claim {},
 }
 
 impl BetInstruction {
@@ -42,7 +42,7 @@ impl BetInstruction {
                     .and_then(|slice| slice.try_into().ok())
                     .map(u64::from_le_bytes)
                     .ok_or(ProgramError::InvalidInstructionData)?;
-                Self::CreateBet { amount }
+                Self::CreatePrediction { amount }
             }
             1 => {
                 let option = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
@@ -58,9 +58,9 @@ impl BetInstruction {
             }
             2 => {
                 let winner = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
-                Self::SettleBet { winner: *winner }
+                Self::EndPrediction { winner: *winner }
             }
-            3 => Self::Withdraw {},
+            3 => Self::Claim {},
             _ => return Err(ProgramError::InvalidInstructionData),
         })
     }
@@ -75,7 +75,7 @@ pub fn process_instruction(
     let instruction = BetInstruction::unpack(instruction_data)?;
 
     match instruction {
-        BetInstruction::CreateBet { amount } => {
+        BetInstruction::CreatePrediction { amount } => {
             msg!("Instruction: CreateBet");
             create_bet(program_id, accounts, amount)
         }
@@ -83,11 +83,11 @@ pub fn process_instruction(
             msg!("Instruction: PlaceBet");
             place_bet(program_id, accounts, option, amount)
         }
-        BetInstruction::SettleBet { winner } => {
+        BetInstruction::EndPrediction { winner } => {
             msg!("Instruction: SettleBet");
             settle_bet(program_id, accounts, winner)
         }
-        BetInstruction::Withdraw {} => {
+        BetInstruction::Claim {} => {
             msg!("Instruction: Withdraw");
             withdraw(accounts)
         }
