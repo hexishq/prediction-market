@@ -1,8 +1,9 @@
-[package]
-name = "solana-gamble"
+[workspace]
+members = ["onchain"]
+resolver = "2"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-bytemuck = "1.15.0"
-solana-program = "1.18.14"
+[workspace.dependencies]

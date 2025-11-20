@@ -1,28 +1,26 @@
 use bytemuck::{Pod, Zeroable};
-use solana_program::{
-    account_info::{next_account_info, AccountInfo},
-    entrypoint,
-    entrypoint::ProgramResult,
-    msg,
-    program::invoke,
+use pinocchio::{
+    account_info::AccountInfo,
+    cpi::invoke,
+    entrypoint, msg,
     program_error::ProgramError,
-    pubkey::Pubkey,
-    system_instruction,
-    sysvar::{rent::Rent, Sysvar},
+    pubkey::{find_program_address, Pubkey},
+    sysvars::rent::Rent,
+    ProgramResult,
 };
 
 entrypoint!(process_instruction);
 
 // Define the data structures for the program
-#[repr(C)]
-#[derive(Copy, Clone, Pod, Zeroable)]
+#[derive(Copy, Clone)]
 pub struct Bet {
-    pub is_initialized: u8, // 1 = initialized, 0 = not initialized
-    pub winner: u8,         // 0 = not decided, 1 = option a, 2 = option b
     pub creator: Pubkey,
     pub option_a_votes: u64,
     pub option_b_votes: u64,
     pub total_amount: u64,
+    pub is_initialized: u8, // 1 = initialized, 0 = not initialized
+    pub winner: u8,         // 0 = not decided, 1 = option a, 2 = option b
+    pub padding: [u8; 14],  // Padding to ensure alignment
 }
 
 pub enum BetInstruction {
@@ -87,51 +85,56 @@ pub fn process_instruction(
 // Create a new bet
 fn create_bet(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
     let accounts_iter = &mut accounts.iter();
-    let creator_account = next_account_info(accounts_iter)?;
-    let bet_account = next_account_info(accounts_iter)?;
-    let system_program = next_account_info(accounts_iter)?;
+    let creator_account = accounts_iter
+        .next()
+        .ok_or(ProgramError::NotEnoughAccountKeys)?;
+    let bet_account = accounts_iter
+        .next()
+        .ok_or(ProgramError::NotEnoughAccountKeys)?;
+    let system_program = accounts_iter
+        .next()
+        .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
-    // Create the bet account
     let rent = Rent::get()?;
     let rent_lamports = rent.minimum_balance(std::mem::size_of::<Bet>());
 
-    invoke(
-        &system_instruction::create_account(
-            creator_account.key,
-            bet_account.key,
-            rent_lamports,
-            std::mem::size_of::<Bet>() as u64,
-            program_id,
-        ),
-        &[
-            creator_account.clone(),
-            bet_account.clone(),
-            system_program.clone(),
-        ],
-    )?;
+    // invoke(
+    //     pinocchio_system::create_account_with_minimum_balance(
+    //         bet_account,
+    //         std::mem::size_of::<Bet>() as usize,
+    //         creator_account.key,
+    //         creator_account,
+    //         None,
+    //     ).map_err(|e|),
+    //     &[
+    //         creator_account.clone(),
+    //         bet_account.clone(),
+    //         system_program.clone(),
+    //     ],
+    // )?;
 
-    // Initialize the bet account
-    let mut bet_data = bet_account.try_borrow_mut_data()?;
-    let bet = bytemuck::from_bytes_mut::<Bet>(&mut bet_data);
+    // // Initialize the bet account
+    // let mut bet_data = bet_account.try_borrow_mut_data()?;
+    // let bet = bytemuck::from_bytes_mut::<Bet>(&mut bet_data);
 
-    bet.is_initialized = 1;
-    bet.creator = *creator_account.key;
-    bet.option_a_votes = 0;
-    bet.option_b_votes = 0;
-    bet.total_amount = 0;
-    bet.winner = 0;
+    // bet.is_initialized = 1;
+    // bet.creator = *creator_account.key;
+    // bet.option_a_votes = 0;
+    // bet.option_b_votes = 0;
+    // bet.total_amount = 0;
+    // bet.winner = 0;
 
-    // Transfer the initial amount to the bet account
-    invoke(
-        &system_instruction::transfer(creator_account.key, bet_account.key, amount),
-        &[
-            creator_account.clone(),
-            bet_account.clone(),
-            system_program.clone(),
-        ],
-    )?;
+    // // Transfer the initial amount to the bet account
+    // invoke(
+    //     &system_instruction::transfer(creator_account.key, bet_account.key, amount),
+    //     &[
+    //         creator_account.clone(),
+    //         bet_account.clone(),
+    //         system_program.clone(),
+    //     ],
+    // )?;
 
-    bet.total_amount = amount;
+    // bet.total_amount = amount;
 
     Ok(())
 }
@@ -148,11 +151,9 @@ fn place_bet(program_id: &Pubkey, accounts: &[AccountInfo], option: u8) -> Progr
         return Err(ProgramError::IncorrectProgramId);
     }
 
-    // Get the bet data
     let mut bet_data = bet_account.try_borrow_mut_data()?;
     let bet = bytemuck::from_bytes_mut::<Bet>(&mut bet_data);
 
-    // Check if the bet is already settled
     if bet.winner != 0 {
         msg!("Bet already settled");
         return Err(ProgramError::InvalidAccountData);
@@ -168,7 +169,6 @@ fn place_bet(program_id: &Pubkey, accounts: &[AccountInfo], option: u8) -> Progr
         }
     }
 
-    // Transfer the bet amount to the bet account
     invoke(
         &system_instruction::transfer(better_account.key, bet_account.key, bet.total_amount),
         &[better_account.clone(), bet_account.clone()],
