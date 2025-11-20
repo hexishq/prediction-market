@@ -6,6 +6,7 @@ use pinocchio::{
 
 entrypoint!(process_instruction);
 
+// Define the data structures for the program
 #[repr(C)]
 #[derive(Copy, Clone, Zeroable, Pod)]
 pub struct Bet {
