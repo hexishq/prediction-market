@@ -1,1 +1,1 @@
-# solflare-hackaton
+# Solana Gamble

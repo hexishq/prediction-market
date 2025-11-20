@@ -1,0 +1,8 @@
+[package]
+name = "solana-gamble"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bytemuck = "1.15.0"
+solana-program = "1.18.14"
