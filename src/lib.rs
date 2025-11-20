@@ -1,29 +1,42 @@
 use bytemuck::{Pod, Zeroable};
 use pinocchio::{
-    instruction::Instruction, ProgramResult, account_info::AccountInfo, entrypoint, msg, program_error::ProgramError, pubkey::{Pubkey, find_program_address}
+    account_info::AccountInfo,
+    entrypoint,
+    instruction::Instruction,
+    msg,
+    program_error::ProgramError,
+    pubkey::{find_program_address, Pubkey},
+    sysvars::rent::Rent,
+    ProgramResult,
 };
 mod token_account;
-use pinocchio_token_2022::instructions::MintTo;
+use pinocchio_system::instructions::Transfer;
 use token_account::*;
 
 entrypoint!(process_instruction);
+
+const TOKEN_PROGRAM_2022: Pubkey = [
+    6, 221, 246, 225, 238, 117, 143, 222, 24, 66, 93, 188, 228, 108, 205, 218, 182, 26, 252, 77,
+    131, 185, 13, 39, 254, 189, 249, 40, 216, 161, 139, 252,
+];
 
 // Define the data structures for the program
 #[repr(C, packed)]
 #[derive(Copy, Clone, Zeroable, Pod)]
 pub struct Bet {
-    pub creator: Pubkey,
-    pub gamble_token_a_mint: Pubkey,
-    pub gamble_token_b_mint: Pubkey,
-    pub gamble_vault_a: Pubkey,
-    pub gamble_vault_b: Pubkey,
-    pub total_amount: u64,
-    pub winner: u8,
+    pub creator: Pubkey,             // 0-32
+    pub gamble_token_a_mint: Pubkey, // 32-64
+    pub gamble_token_b_mint: Pubkey, // 64 -96
+    pub gamble_vault_a: Pubkey,      // 96-128
+    pub gamble_vault_b: Pubkey,      // 128-160
+    pub total_amount: u64,           // 160-168
+    pub winner: u8,                  // 168-169
+    pub padding: [u8; 7],            // 169-176
 }
 
 pub enum BetInstruction {
     CreatePrediction { amount: u64 }, // admin command
-    EndPrediction { winner: u8 }, // admin command
+    EndPrediction { winner: u8 },     // admin command
     PlaceBet { option: u8, amount: u64 },
     Claim {},
 }
@@ -89,7 +102,7 @@ pub fn process_instruction(
         }
         BetInstruction::Claim {} => {
             msg!("Instruction: Withdraw");
-            withdraw(accounts)
+            claim(accounts)
         }
     }
 }
@@ -114,23 +127,27 @@ fn create_bet(program_id: &Pubkey, accounts: &[AccountInfo], _amount: u64) -> Pr
         .next()
         .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
+    let mint_a_account = accounts_iter
+        .next()
+        .ok_or(ProgramError::NotEnoughAccountKeys)?;
+
+    let mint_b_account = accounts_iter
+        .next()
+        .ok_or(ProgramError::NotEnoughAccountKeys)?;
+
     let mint_a = find_program_address(&[bet_account, 1], program_id);
+
     let mint_b = find_program_address(&[bet_account, 2], program_id);
 
-    MintTo {
-        mint: mint_a,
-        amount: 10_u64.pow(9) * 10_u64.pow(6),
-        account: todo!(),
-        mint_authority: todo!(),
-        token_program: todo!(),
-    };
+    if mint_a_account.key() != &mint_a.0 {
+        msg!("Mint A account does not match the derived address");
+        return Err(ProgramError::InvalidAccountData);
+    }
 
-    :MintTo {
-        mint: mint_b,
-        destination: vault_b_account,
-        authority: bet_account,
-        amount: 10_u64.pow(9) * 10_u64.pow(6),
-    };
+    if mint_b_account.key() != &mint_b.0 {
+        msg!("Mint B account does not match the derived address");
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     let rent = Rent::get()?;
 
@@ -156,6 +173,7 @@ fn create_bet(program_id: &Pubkey, accounts: &[AccountInfo], _amount: u64) -> Pr
         token_program: todo!(),
     }
     .invoke()?;
+
     pinocchio_associated_token_account::instructions::Create {
         funding_account: todo!(),
         account: todo!(),
@@ -174,6 +192,28 @@ fn create_bet(program_id: &Pubkey, accounts: &[AccountInfo], _amount: u64) -> Pr
     bet.winner = 0;
 
     Ok(())
+}
+
+fn initialize_mint(
+    decimals: u8,
+    mint_account: &AccountInfo,
+    mint_authority: Pubkey,
+    freeze_authority: Option<Pubkey>,
+) -> ProgramResult {
+    let instruction_data = vec![];
+    Instruction {
+        program_id: TOKEN_PROGRAM_2022,
+        data: TokenInstruction::InitializeMint {
+            decimals,
+            mint_authority,
+            freeze_authority,
+        }
+        .pack(),
+        accounts: vec![
+            AccountMeta::new(*mint_account.key(), false),
+            AccountMeta::new_readonly(system_program::ID, false),
+        ],
+    }
 }
 
 // Place a bet on one of the alternatives
@@ -260,12 +300,6 @@ fn settle_bet(program_id: &Pubkey, accounts: &[AccountInfo], winner: u8) -> Prog
 
     bet.winner = winner;
 
-    let winner_votes = if winner == 1 {
-        bet.option_a_votes
-    } else {
-        bet.option_b_votes
-    };
-
     let total_amount = bet.total_amount;
 
     // Transfer the funds to the winners
@@ -276,40 +310,59 @@ fn settle_bet(program_id: &Pubkey, accounts: &[AccountInfo], winner: u8) -> Prog
 
     *creator_account.try_borrow_mut_lamports()? += bet_account.lamports();
 
-    bet.is_initialized = 0;
     bet.creator = Pubkey::default();
-    bet.option_a_votes = 0;
-    bet.option_b_votes = 0;
     bet.total_amount = 0;
 
     Ok(())
 }
 
-// [signer, signer_token_account, token_mint, pool, vault_wsol, vault_token, token_program]
-fn withdraw(accounts: &[AccountInfo]) -> ProgramResult {
-    unsafe{
-
+// [signer, signer_token_account, pool, vault_wsol, vault_token_a, vault_token_b, token_program]
+fn claim(accounts: &[AccountInfo]) -> ProgramResult {
     let signer = accounts.get(0).ok_or(ProgramError::InvalidAccountData)?;
     let signer_token_account = accounts.get(1).ok_or(ProgramError::InvalidAccountData)?;
     let token_mint = accounts.get(2).ok_or(ProgramError::InvalidAccountData)?;
     let pool = accounts.get(3).ok_or(ProgramError::InvalidAccountData)?;
     let vault_wsol = accounts.get(4).ok_or(ProgramError::InvalidAccountData)?;
-    let vault_token = accounts.get(5).ok_or(ProgramError::InvalidAccountData)?;
-    let token_program = accounts.get(6).ok_or(ProgramError::InvalidAccountData)?;
+    let vault_token_a = accounts.get(5).ok_or(ProgramError::InvalidAccountData)?;
+    let vault_token_b = accounts.get(6).ok_or(ProgramError::InvalidAccountData)?;
+    let token_program = accounts.get(7).ok_or(ProgramError::InvalidAccountData)?;
 
-    let token_amount = AtaAccessor::get_mint(signer_token_account.borrow_data_unchecked());
+    let token_mint = AtaAccessor::get_mint(signer_token_account.borrow_data_unchecked());
 
-    let ix_take_token = Instruction{
-        program_id: token_program.key() ,
-        data: todo!(),
-        accounts: todo!(),
+    let winner: u8 = unsafe { bytemuck::from_bytes(&pool.borrow_data_unchecked()[168]) };
+    let (win_mint, to) = if winner == 1 {
+        (
+            AtaAccessor::get_mint(vault_token_a.borrow_data_unchecked()),
+            vault_token_a,
+        )
+    } else if winner == 2 {
+        (
+            AtaAccessor::get_mint(vault_token_b.borrow_data_unchecked()),
+            vault_token_b,
+        )
+    } else {
+        return Err(ProgramError::InvalidAccountData);
     };
 
-    invoke{
+    let winner_amount = AtaAccessor::get_amount(&signer_token_account);
 
+    if win_mint != token_mint {
+        return Err(ProgramError::InvalidAccountData);
     }
+
+    let signer_to_pool = Transfer {
+        from: signer,
+        to,
+        lamports: winner_amount,
+    };
+
+    let pool_to_signer = Transfer {
+        from: vault_wsol,
+        to: signer,
+        lamports: winner_amount,
+    };
+
     Ok(())
-    }
 }
 
 #[cfg(test)]
