@@ -7,7 +7,9 @@ use {
     solana_transaction::Transaction,
     tracing::{error, info},
 };
-const CLAIM_INSTRUCTION: u8 = 3;
+
+const CLAIM_INSTRUCTION_DISCRIMINATOR: u8 = 3;
+
 pub struct ClaimCommand {
     market: Pubkey,
 }
@@ -45,7 +47,7 @@ impl RunCommand for ClaimCommand {
                 &crate::TOKEN_PROGRAM_2022_ID,
             );
 
-        let ix_data = [CLAIM_INSTRUCTION];
+        let ix_data = [CLAIM_INSTRUCTION_DISCRIMINATOR];
         let ix_accounts = self.get_accounts_metadata(
             &context.keypair.pubkey(),
             &self.market,
