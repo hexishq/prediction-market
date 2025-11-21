@@ -14,6 +14,17 @@ use {
 const DEVNET: &str = "https://api.devnet.solana.com";
 const MAINNET_BETA: &str = "https://api.mainnet-beta.solana.com";
 const LOCALHOST: &str = "http://localhost:8899";
+const WSOL: Pubkey = Pubkey::from_str_const("So11111111111111111111111111111111111111112");
+
+const TOKEN_PROGRAM_ID: Pubkey =
+    Pubkey::from_str_const("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+
+const TOKEN_PROGRAM_2022_ID: Pubkey =
+    Pubkey::from_str_const("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+
+const ASSOCIATED_TOKEN_PROGRAM_ID: Pubkey = spl_associated_token_account::ID;
+
+const PROGRAM_ID: Pubkey = Pubkey::from_str_const("6w3daRgCgWgbvkTCXgzP5X3qYXYABpiiFWgLU6HfeJPw"); // Placeholder
 
 #[derive(Debug, Parser)]
 #[command(

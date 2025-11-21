@@ -1,7 +1,7 @@
 #![allow(unexpected_cfgs)]
 
 use {
-    crate::constants::{BASIS_POINT, DEFAULT_DECIMALS, FEE_BPS, FEE_WALLET},
+    crate::constants::{BASIS_POINT, DEFAULT_DECIMALS, FEE_BPS, FEE_WALLET, MINT_DEFAULT_SIZE},
     hexis_prediction_market_interface::{Prediction, PredictionInstruction},
     pinocchio::{
         account_info::AccountInfo,
@@ -116,44 +116,6 @@ fn create(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         .next()
         .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
-    let mut prediction_data = prediction_account.try_borrow_mut_data()?;
-
-    let prediction =
-        bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
-            sol_log(&format!("Failed to borrow prediction data: {e}"));
-            ProgramError::InvalidAccountData
-        })?;
-
-    // Verify that the mint accounts are the expected ones
-    if *mint_a_account.key() != prediction.gamble_token_a_mint {
-        sol_log("Mint A account does not match the derived address");
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    if *mint_b_account.key() != prediction.gamble_token_b_mint {
-        sol_log("Mint B account does not match the derived address");
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    // Initializes both mint accounts (but doesn't mint any tokens yet)
-    pinocchio_token_2022::instructions::InitializeMint2 {
-        mint: mint_a_account,
-        decimals: DEFAULT_DECIMALS,
-        mint_authority: program_id,
-        freeze_authority: Some(program_id),
-        token_program: &constants::TOKEN_PROGRAM_2022,
-    }
-    .invoke()?;
-
-    pinocchio_token_2022::instructions::InitializeMint2 {
-        mint: mint_b_account,
-        decimals: DEFAULT_DECIMALS,
-        mint_authority: program_id,
-        freeze_authority: Some(program_id),
-        token_program: &constants::TOKEN_PROGRAM_2022,
-    }
-    .invoke()?;
-
     // Create prediction account
     pinocchio_system::instructions::CreateAccount {
         from: creator_account,
@@ -161,6 +123,48 @@ fn create(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         lamports: Rent::get()?.minimum_balance(std::mem::size_of::<Prediction>()),
         space: std::mem::size_of::<Prediction>() as u64,
         owner: program_id,
+    }
+    .invoke()?;
+
+    let prediction = unsafe {
+        &mut *(prediction_account.try_borrow_mut_data()?.as_mut_ptr() as *mut Prediction)
+    };
+
+    // Create mint accounts
+    pinocchio_system::instructions::CreateAccount {
+        from: creator_account,
+        to: mint_a_account,
+        lamports: Rent::get()?.minimum_balance(MINT_DEFAULT_SIZE as usize),
+        space: MINT_DEFAULT_SIZE as u64,
+        owner: &constants::TOKEN_PROGRAM_2022,
+    }
+    .invoke()?;
+
+    pinocchio_system::instructions::CreateAccount {
+        from: creator_account,
+        to: mint_b_account,
+        lamports: Rent::get()?.minimum_balance(MINT_DEFAULT_SIZE as usize),
+        space: MINT_DEFAULT_SIZE as u64,
+        owner: &constants::TOKEN_PROGRAM_2022,
+    }
+    .invoke()?;
+
+    // Initializes both mint accounts (but doesn't mint any tokens yet)
+    pinocchio_token_2022::instructions::InitializeMint2 {
+        mint: mint_a_account,
+        decimals: DEFAULT_DECIMALS,
+        mint_authority: prediction_account.key(),
+        freeze_authority: Some(prediction_account.key()),
+        token_program: &constants::TOKEN_PROGRAM_2022,
+    }
+    .invoke()?;
+
+    pinocchio_token_2022::instructions::InitializeMint2 {
+        mint: mint_b_account,
+        decimals: DEFAULT_DECIMALS,
+        mint_authority: prediction_account.key(),
+        freeze_authority: Some(prediction_account.key()),
+        token_program: &constants::TOKEN_PROGRAM_2022,
     }
     .invoke()?;
 
