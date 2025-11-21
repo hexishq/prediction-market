@@ -244,19 +244,6 @@ fn place_bet(
             ProgramError::InvalidAccountData
         })?;
 
-    let creator_sol_account_data = creator_sol_account.try_borrow_data()?;
-    let protocol_fee_account_data = protocol_fee_account.try_borrow_data()?;
-
-    if AtaAccessor::get_owner(&creator_sol_account_data) != prediction.creator {
-        sol_log("Creator SOL account isn't owned by the prediction creator");
-        return Err(ProgramError::IllegalOwner);
-    }
-
-    if AtaAccessor::get_owner(&protocol_fee_account_data) != FEE_WALLET {
-        sol_log("Protocol fee account isn't owned by the fee wallet");
-        return Err(ProgramError::IllegalOwner);
-    }
-
     let creator_fee = amount
         .checked_mul(FEE_BPS)
         .ok_or(ProgramError::ArithmeticOverflow)?
@@ -286,6 +273,20 @@ fn place_bet(
         token_program: &constants::TOKEN_PROGRAM,
     }
     .invoke()?;
+
+    // Checking after transfers to avoid duplicate reference borrow
+    let creator_sol_account_data = creator_sol_account.try_borrow_data()?;
+    let protocol_fee_account_data = protocol_fee_account.try_borrow_data()?;
+
+    if AtaAccessor::get_owner(&creator_sol_account_data) != prediction.creator {
+        sol_log("Creator SOL account isn't owned by the prediction creator");
+        return Err(ProgramError::IllegalOwner);
+    }
+
+    if AtaAccessor::get_owner(&protocol_fee_account_data) != FEE_WALLET {
+        sol_log("Protocol fee account isn't owned by the fee wallet");
+        return Err(ProgramError::IllegalOwner);
+    }
 
     let total_fee = creator_fee
         .checked_add(protocol_fee)

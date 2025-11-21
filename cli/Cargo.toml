@@ -8,6 +8,7 @@ name = "prediction-market"
 path = "src/main.rs"
 
 [dependencies]
+hexis-prediction-market-interface = { path = "../interface" }
 spl-associated-token-account = "8.0.0"
 solana-system-program = "3.1.1"
 clap = { workspace = true }
@@ -23,3 +24,4 @@ solana-instruction = { workspace = true }
 solana-message = { workspace = true }
 solana-transaction = { workspace = true }
 solana-commitment-config = { workspace = true }
+spl-token = "9.0.0"
