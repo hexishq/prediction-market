@@ -37,20 +37,28 @@ impl RunCommand for ClaimCommand {
             market.gamble_token_b_mint
         };
 
+        let ix_create_idempotent =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &context.keypair.pubkey(),
+                &context.keypair.pubkey(),
+                &Pubkey::new_from_array(mint_pubkey),
+                &crate::TOKEN_PROGRAM_2022_ID,
+            );
+
         let ix_data = [CLAIM_INSTRUCTION];
         let ix_accounts = self.get_accounts_metadata(
             &context.keypair.pubkey(),
             &self.market,
             &Pubkey::new_from_array(mint_pubkey),
         );
-        let ix = Instruction {
+        let ix_claim = Instruction {
             program_id: crate::PROGRAM_ID,
             accounts: ix_accounts,
             data: ix_data.to_vec(),
         };
 
         let tx = Transaction::new_signed_with_payer(
-            &[ix],
+            &[ix_create_idempotent, ix_claim],
             Some(&context.keypair.pubkey()),
             &[&context.keypair],
             context.client.get_latest_blockhash().map_err(|e| {
