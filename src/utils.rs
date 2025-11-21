@@ -1,6 +1,8 @@
 use {
-    crate::constants::TOKEN_PROGRAM_2022,
-    pinocchio::{account_info::AccountInfo, pubkey::Pubkey, ProgramResult},
+    crate::constants::{BASIS_POINT, TOKEN_PROGRAM_2022},
+    pinocchio::{
+        account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey, ProgramResult,
+    },
 };
 
 pub fn initialize_mint(
@@ -17,4 +19,30 @@ pub fn initialize_mint(
         token_program: &TOKEN_PROGRAM_2022,
     }
     .invoke()
+}
+
+pub fn transfer_fee(
+    amount: u64,
+    fee_bps: u64,
+    from: &AccountInfo,
+    to: &AccountInfo,
+    authority: &AccountInfo,
+    token_program: &Pubkey,
+) -> Result<u64, ProgramError> {
+    let amount_to_transfer = amount
+        .checked_mul(fee_bps)
+        .ok_or(ProgramError::ArithmeticOverflow)?
+        .checked_div(BASIS_POINT)
+        .ok_or(ProgramError::ArithmeticOverflow)?;
+
+    pinocchio_token_2022::instructions::Transfer {
+        from,
+        to,
+        authority,
+        amount: amount_to_transfer,
+        token_program,
+    }
+    .invoke()?;
+
+    Ok(amount_to_transfer)
 }
