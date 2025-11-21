@@ -22,41 +22,47 @@ use ata_accessor::*;
 
 entrypoint!(process_instruction);
 
-// Define the data structures for the program
+// We Define the data structures for the program
 #[repr(C, packed)]
 #[derive(Copy, Clone, Zeroable, Pod)]
 pub struct Prediction {
+    // Prediction creator (who created the bet), has authority to end it.
     pub creator: Pubkey,
+    // Tokens created for the pool, these are needed so we can know how much and if a user bet
+    // on a determined side of the prediction.
     pub gamble_token_a_mint: Pubkey,
     pub gamble_token_b_mint: Pubkey,
+    // Total amount of SOL deposited into the pool.
     pub total_amount: u64,
+    // Which side won the prediction (0 = prediction active, 1 = Side 1 won, 2 = Side 2 won)
     pub winner: u8,
+    // Padding to ensure alignment
     pub padding: [u8; 7],
 }
 
-pub enum BetInstruction {
-    CreatePrediction { amount: u64 }, // admin command
-    EndPrediction { winner: u8 },     // admin command
+/// Instructions used to interact with onchain program
+pub enum PredictionInstruction {
+    /// Creates a new prediction
+    CreatePrediction {},
+    /// Ends an existant prediction
+    EndPrediction { winner: u8 },
+    /// Bets on some side of the prediction
     PlaceBet { option: u8, amount: u64 },
+    /// Claim SOL won with some prediction if any
     Claim,
 }
 
-impl BetInstruction {
-    // Unpack the instruction data
+impl PredictionInstruction {
+    // Unpack the instruction data into a known instruction
     pub fn unpack(input: &[u8]) -> Result<Self, ProgramError> {
-        let (tag, rest) = input
+        let (discriminator, rest) = input
             .split_first()
             .ok_or(ProgramError::InvalidInstructionData)?;
 
-        Ok(match tag {
-            0 => {
-                let amount = rest
-                    .get(..8)
-                    .and_then(|slice| slice.try_into().ok())
-                    .map(u64::from_le_bytes)
-                    .ok_or(ProgramError::InvalidInstructionData)?;
-                Self::CreatePrediction { amount }
-            }
+        // Each brace has error handling for each instruction parsing
+        Ok(match discriminator {
+            // Create doesn't have any instruction data, since it just initializes a prediction (for now)
+            0 => Self::CreatePrediction {},
             1 => {
                 let option = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
                 let amount = rest
@@ -64,6 +70,7 @@ impl BetInstruction {
                     .and_then(|slice| slice.try_into().ok())
                     .map(u64::from_le_bytes)
                     .ok_or(ProgramError::InvalidInstructionData)?;
+
                 Self::PlaceBet {
                     option: *option,
                     amount,
@@ -73,42 +80,42 @@ impl BetInstruction {
                 let winner = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
                 Self::EndPrediction { winner: *winner }
             }
+            // Claim doesn't have any instruction data, since all that is needed is user token vault
             3 => Self::Claim,
             _ => return Err(ProgramError::InvalidInstructionData),
         })
     }
 }
 
-// Instruction processor
 pub fn process_instruction(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    let instruction = BetInstruction::unpack(instruction_data)?;
+    let instruction = PredictionInstruction::unpack(instruction_data)?;
 
     match instruction {
-        BetInstruction::CreatePrediction { amount } => {
+        PredictionInstruction::CreatePrediction {} => {
             sol_log("Instruction: CreateBet");
-            create(program_id, accounts, amount)
+            create(program_id, accounts)
         }
-        BetInstruction::PlaceBet { option, amount } => {
+        PredictionInstruction::PlaceBet { option, amount } => {
             sol_log("Instruction: PlaceBet");
             place_bet(program_id, accounts, option, amount)
         }
-        BetInstruction::EndPrediction { winner } => {
+        PredictionInstruction::EndPrediction { winner } => {
             sol_log("Instruction: SettleBet");
             end_prediction(program_id, accounts, winner)
         }
-        BetInstruction::Claim => {
+        PredictionInstruction::Claim => {
             sol_log("Instruction: Claim");
             claim(accounts)
         }
     }
 }
 
-// Create a new prediction
-fn create(program_id: &Pubkey, accounts: &[AccountInfo], _amount: u64) -> ProgramResult {
+/// Initializes a new prediction
+fn create(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let accounts_iter = &mut accounts.iter();
 
     let creator_account = accounts_iter
@@ -143,38 +150,34 @@ fn create(program_id: &Pubkey, accounts: &[AccountInfo], _amount: u64) -> Progra
         .next()
         .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
-    let (mint_a, _bump) = find_program_address(
-        &[prediction_account.key(), &1_u64.to_le_bytes()],
-        program_id,
-    );
+    let mut prediction_data = prediction_account.try_borrow_mut_data()?;
 
-    let (mint_b, _bump) = find_program_address(
-        &[prediction_account.key(), &2_u64.to_le_bytes()],
-        program_id,
-    );
+    let prediction =
+        bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
+            sol_log(&format!("Failed to borrow prediction data: {e}"));
+            ProgramError::InvalidAccountData
+        })?;
 
-    if mint_a_account.key() != &mint_a {
+    // Verify that the mint accounts are the expected ones
+    if *mint_a_account.key() != prediction.gamble_token_a_mint {
         sol_log("Mint A account does not match the derived address");
         return Err(ProgramError::InvalidAccountData);
     }
 
-    if mint_b_account.key() != &mint_b {
+    if *mint_b_account.key() != prediction.gamble_token_b_mint {
         sol_log("Mint B account does not match the derived address");
         return Err(ProgramError::InvalidAccountData);
     }
 
+    // Initializes both mint accounts (but doesn't mint any tokens yet)
     initialize_mint(9, mint_a_account, program_id, Some(program_id))?;
     initialize_mint(9, mint_b_account, program_id, Some(program_id))?;
-
-    let rent = Rent::get()?;
-
-    sol_log("Creating bet account");
 
     // Create prediction account
     pinocchio_system::instructions::CreateAccount {
         from: creator_account,
         to: prediction_account,
-        lamports: rent.minimum_balance(std::mem::size_of::<Prediction>()),
+        lamports: Rent::get()?.minimum_balance(std::mem::size_of::<Prediction>()),
         space: std::mem::size_of::<Prediction>() as u64,
         owner: program_id,
     }
@@ -191,24 +194,18 @@ fn create(program_id: &Pubkey, accounts: &[AccountInfo], _amount: u64) -> Progra
     }
     .invoke()?;
 
-    let mut prediction_data = prediction_account.try_borrow_mut_data()?;
-
-    let prediction =
-        bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
-            sol_log(&format!("Failed to borrow prediction data: {e}"));
-            ProgramError::InvalidAccountData
-        })?;
-
+    // Initialize prediction data
     prediction.creator = *creator_account.key();
     prediction.total_amount = 0;
     prediction.winner = 0;
-    prediction.gamble_token_a_mint = mint_a;
-    prediction.gamble_token_b_mint = mint_b;
+    prediction.gamble_token_a_mint = *mint_a_account.key();
+    prediction.gamble_token_b_mint = *mint_b_account.key();
 
     Ok(())
 }
 
-// Place a bet on one of the alternatives
+/// Place bet on some side of the prediction, transferring SOL from user to pool and minting
+/// the corresponding tokens to the user
 fn place_bet(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -293,6 +290,7 @@ fn place_bet(
     }
     .invoke()?;
 
+    // Minting the corresponding tokens to the user
     pinocchio_token_2022::instructions::MintTo {
         mint: mint_account,
         account: user_token_account,
@@ -302,20 +300,12 @@ fn place_bet(
     }
     .invoke()?;
 
-    // Transfer lamports from gambler to bet account
-    pinocchio_system::instructions::Transfer {
-        from: gambler_account,
-        to: prediction_account,
-        lamports: amount,
-    }
-    .invoke()?;
-
     prediction.total_amount += amount;
 
     Ok(())
 }
 
-// Ends the prediction by setting the winner
+/// Ends the prediction by setting the winner
 fn end_prediction(program_id: &Pubkey, accounts: &[AccountInfo], winner: u8) -> ProgramResult {
     let accounts_iter = &mut accounts.iter();
 
@@ -335,11 +325,13 @@ fn end_prediction(program_id: &Pubkey, accounts: &[AccountInfo], winner: u8) -> 
     let mut prediction_data = prediction_account.try_borrow_mut_data()?;
     let prediction = bytemuck::from_bytes_mut::<Prediction>(&mut prediction_data);
 
+    // Only the creator can end the predictions
     if creator_account.is_signer() && *creator_account.key() != prediction.creator {
         sol_log("Only the creator can settle the prediction");
         return Err(ProgramError::IllegalOwner);
     }
 
+    // Check if the prediction has already been settled
     if prediction.winner != 0 {
         sol_log("Prediction already settled");
         return Err(ProgramError::InvalidAccountData);
@@ -381,11 +373,13 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
         ProgramError::InvalidAccountData
     })?;
 
+    // Check if the prediction has been settled
     if prediction.winner == 0 {
         sol_log("Prediction has not been settled yet");
         return Err(ProgramError::InvalidAccountData);
     }
 
+    // Check if the winner option is valid
     if prediction.winner != 1 && prediction.winner != 2 {
         sol_log("Invalid winner option in prediction");
         return Err(ProgramError::InvalidAccountData);
@@ -397,6 +391,7 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
         prediction.gamble_token_b_mint
     };
 
+    // Check if the user token account mint matches the winner mint
     if winner_mint != user_token_account_mint {
         sol_log("Winner mint doesn't match provided user token account");
         return Err(ProgramError::InvalidAccountData);
@@ -408,7 +403,7 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
         .checked_div(prediction.total_amount)
         .ok_or(ProgramError::ArithmeticOverflow)?;
 
-    // Burn all user tokens
+    // Burn all user tokens (so he can't claim again)
     pinocchio_token_2022::instructions::Burn {
         mint: mint_account,
         account: user_token_account,
