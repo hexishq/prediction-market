@@ -9,8 +9,9 @@ pub struct Prediction {
     // on a determined side of the prediction.
     pub gamble_token_a_mint: [u8; 32],
     pub gamble_token_b_mint: [u8; 32],
-    // Total amount of SOL deposited into the pool.
-    pub total_amount: u64,
+    // Total amount of tokens minted (total_token_a + total_token_b = total sol)
+    pub total_token_a: u64,
+    pub total_token_b: u64,
     // Which side won the prediction (0 = prediction active, 1 = Side 1 won, 2 = Side 2 won)
     pub winner: u8,
     // Padding to ensure alignment

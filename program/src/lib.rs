@@ -181,7 +181,7 @@ fn create(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
 
     // Initialize prediction data
     prediction.creator = *creator_account.key();
-    prediction.total_amount = 0;
+    prediction.total_token_a = 0;
     prediction.winner = 0;
     prediction.gamble_token_a_mint = *mint_a_account.key();
     prediction.gamble_token_b_mint = *mint_b_account.key();
@@ -344,7 +344,12 @@ fn place_bet(
     }
     .invoke()?;
 
-    prediction.total_amount += amount;
+    // This works because token has equivalent decimals, so 1 lamport = token (for the program)
+    if option == 1 {
+        prediction.total_token_a += amount;
+    } else {
+        prediction.total_token_b += amount;
+    }
 
     Ok(())
 }
@@ -442,9 +447,17 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
     }
 
     let user_token_amount = AtaAccessor::get_amount(&user_token_account.try_borrow_data()?);
+    let winner_token_amount = if prediction.winner == 1 {
+        prediction.total_token_a
+    } else {
+        prediction.total_token_b
+    };
+    let total_sol_deposited = prediction.total_token_a + prediction.total_token_b;
 
     let amount_won = user_token_amount
-        .checked_div(prediction.total_amount)
+        .checked_div(winner_token_amount)
+        .ok_or(ProgramError::ArithmeticOverflow)?
+        .checked_mul(total_sol_deposited)
         .ok_or(ProgramError::ArithmeticOverflow)?;
 
     // Burn all user tokens (so he can't claim again)
