@@ -1,6 +1,6 @@
 use {
     super::{CommandContext, RunCommand},
-    crate::{read_prediction_market_account, CliResult, WSOL},
+    crate::{read_prediction_market_account, CliResult, TOKEN_PROGRAM_2022_ID, WSOL},
     solana_message::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
     solana_signer::Signer,
@@ -87,10 +87,12 @@ impl ClaimCommand {
         pool_id: &Pubkey,
         mint_account: &Pubkey,
     ) -> Vec<AccountMeta> {
-        let user_token_account = spl_associated_token_account::get_associated_token_address(
-            &signer_pubkey,
-            &mint_account,
-        );
+        let user_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &signer_pubkey,
+                &mint_account,
+                &TOKEN_PROGRAM_2022_ID,
+            );
         let pool_sol_vault =
             spl_associated_token_account::get_associated_token_address(&pool_id, &WSOL);
 
