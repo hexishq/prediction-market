@@ -110,7 +110,7 @@ impl RunCommand for PlaceBetCommand {
         let place_bet_ix = Instruction {
             program_id: PROGRAM_ID,
             accounts,
-            // disc (u8), amount (u64)
+            // disc (u8), option(u8), amount (u64)
             data: instruction_data,
         };
 
