@@ -6,7 +6,7 @@ use {
     solana_cli_config::Config,
     solana_client::rpc_client::RpcClient,
     solana_commitment_config::CommitmentConfig,
-    solana_keypair::Keypair,
+    solana_keypair::read_keypair_file,
     solana_pubkey::Pubkey,
     std::{str::FromStr, sync::Arc, time::Duration},
 };
@@ -98,7 +98,12 @@ pub enum CliError {
 pub type CliResult<T> = Result<T, CliError>;
 
 pub fn run(config: Arc<Config>, command: Command) -> CliResult<()> {
-    let url = resolve_cluster_url(&config.json_rpc_url);
+    let url = match config.json_rpc_url.as_str() {
+        "mainnet-beta" | "mainnet" | "m" => MAINNET_BETA.to_string(),
+        "devnet" | "d" => DEVNET.to_string(),
+        "localhost" | "l" => LOCALHOST.to_string(),
+        custom => custom.to_string(),
+    };
 
     let client = RpcClient::new_with_timeout_and_commitment(
         url,
@@ -106,7 +111,8 @@ pub fn run(config: Arc<Config>, command: Command) -> CliResult<()> {
         CommitmentConfig::from_str(&config.commitment)?,
     );
 
-    let keypair = load_keypair(&config.keypair_path)?;
+    let keypair = read_keypair_file(&config.keypair_path)
+        .map_err(|e| CliError::CommandExecution(format!("Failed to load keypair: {}", e)))?;
 
     let context = CommandContext { keypair, client };
 
@@ -130,18 +136,4 @@ pub fn run(config: Arc<Config>, command: Command) -> CliResult<()> {
     }
 
     Ok(())
-}
-
-fn resolve_cluster_url(url: &str) -> String {
-    match url {
-        "mainnet-beta" | "mainnet" | "m" => MAINNET_BETA.to_string(),
-        "devnet" | "d" => DEVNET.to_string(),
-        "localhost" | "l" => LOCALHOST.to_string(),
-        custom => custom.to_string(),
-    }
-}
-
-fn load_keypair(keypair_path: &str) -> CliResult<Keypair> {
-    solana_keypair::read_keypair_file(keypair_path)
-        .map_err(|e| CliError::CommandExecution(format!("Failed to load keypair: {}", e)))
 }
