@@ -88,18 +88,18 @@ impl ClaimCommand {
         mint_account: &Pubkey,
     ) -> Vec<AccountMeta> {
         let user_token_account = spl_associated_token_account::get_associated_token_address(
-            &mint_account,
             &signer_pubkey,
+            &mint_account,
         );
         let pool_sol_vault =
             spl_associated_token_account::get_associated_token_address(&pool_id, &WSOL);
 
         vec![
             AccountMeta::new(*signer_pubkey, true),
-            AccountMeta::new(user_token_account, false),
-            AccountMeta::new(*mint_account, false),
+            AccountMeta::new_readonly(user_token_account, false),
+            AccountMeta::new_readonly(*mint_account, false),
             AccountMeta::new(pool_sol_vault, false),
-            AccountMeta::new_readonly(*pool_id, false),
+            AccountMeta::new(*pool_id, false),
         ]
     }
 }
