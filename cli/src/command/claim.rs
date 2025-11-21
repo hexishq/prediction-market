@@ -1,7 +1,7 @@
 use {
     super::{CommandContext, RunCommand},
-    crate::{read_prediction_market_account, CliError, CliResult, WSOL},
-    solana_message::{v0::Message, AccountMeta, Instruction},
+    crate::{read_prediction_market_account, CliResult, WSOL},
+    solana_message::{AccountMeta, Instruction},
     solana_pubkey::Pubkey,
     solana_signer::Signer,
     solana_transaction::Transaction,
@@ -38,10 +38,13 @@ impl RunCommand for ClaimCommand {
         };
 
         let ix_data = [CLAIM_INSTRUCTION];
-        let ix_accounts =
-            self.get_accounts_metadata(&context.keypair.pubkey(), &self.market, &mint_pubkey);
+        let ix_accounts = self.get_accounts_metadata(
+            &context.keypair.pubkey(),
+            &self.market,
+            &Pubkey::new_from_array(mint_pubkey),
+        );
         let ix = Instruction {
-            program_id: market.program_id,
+            program_id: crate::PROGRAM_ID,
             accounts: ix_accounts,
             data: ix_data.to_vec(),
         };
