@@ -1,7 +1,7 @@
 use bytemuck::{Pod, Zeroable};
 
 #[repr(C, packed)]
-#[derive(Copy, Clone, Zeroable, Pod)]
+#[derive(Copy, Clone, Zeroable, Pod, Default)]
 pub struct Prediction {
     // Prediction creator (who created the bet), has authority to end it.
     pub creator: [u8; 32],
