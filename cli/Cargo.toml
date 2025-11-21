@@ -24,4 +24,4 @@ solana-instruction = { workspace = true }
 solana-message = { workspace = true }
 solana-transaction = { workspace = true }
 solana-commitment-config = { workspace = true }
-spl-token-interface = "2.0.0"
+spl-token-2022-interface = "2.1.0"

@@ -4,6 +4,7 @@ pub use command::*;
 use hexis_prediction_market_interface::Prediction;
 use {
     clap::{Parser, Subcommand},
+    hexis_prediction_market_interface::Prediction,
     solana_cli_config::Config,
     solana_client::rpc_client::RpcClient,
     solana_commitment_config::CommitmentConfig,

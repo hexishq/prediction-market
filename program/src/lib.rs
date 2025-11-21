@@ -403,6 +403,7 @@ fn end_prediction(program_id: &Pubkey, accounts: &[AccountInfo], winner: u8) -> 
     Ok(())
 }
 
+// [signer, user_token_account, mint_account, pool_sol_vault, pool_account]
 fn claim(accounts: &[AccountInfo]) -> ProgramResult {
     let mut accounts_iter = accounts.iter();
 
