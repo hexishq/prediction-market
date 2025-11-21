@@ -22,6 +22,12 @@ impl AtaAccessor {
             .unwrap()
     }
 
+    pub fn get_owner(data: &[u8]) -> Pubkey {
+        data[Self::INDEXES.offset_owner..Self::INDEXES.offset_amount]
+            .try_into()
+            .unwrap()
+    }
+
     pub fn get_amount(data: &[u8]) -> u64 {
         u64::from_le_bytes(
             data[Self::INDEXES.offset_amount..Self::INDEXES.offset_delegate_option]
