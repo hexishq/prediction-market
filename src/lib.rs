@@ -46,7 +46,7 @@ pub enum PredictionInstruction {
     EndPrediction { winner: u8 },
     /// Bets on some side of the prediction
     PlaceBet { option: u8, amount: u64 },
-    /// Claim SOL won with some prediction if any
+    /// Claim SOL winnings after prediction has ended, if the user won
     Claim,
 }
 
