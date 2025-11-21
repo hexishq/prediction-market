@@ -470,9 +470,9 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
         .ok_or(ProgramError::ArithmeticOverflow)?;
 
     let amount_won = user_token_amount
-        .checked_div(winner_token_amount)
-        .ok_or(ProgramError::ArithmeticOverflow)?
         .checked_mul(total_sol_deposited)
+        .ok_or(ProgramError::ArithmeticOverflow)?
+        .checked_div(winner_token_amount)
         .ok_or(ProgramError::ArithmeticOverflow)?;
 
     // Burn all user tokens (so he can't claim again)
