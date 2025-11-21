@@ -44,9 +44,9 @@ impl RunCommand for CreateCommand {
             AccountMeta::new(prediction_account.pubkey(), true),
             // SOL vault account (associated token account)
             AccountMeta::new(prediction_sol_vault, false),
-            // Mint A account (PDA)
+            // Mint A account (keypair-based)
             AccountMeta::new(mint_a_account.pubkey(), true),
-            // Mint B account (PDA)
+            // Mint B account (keypair-based)
             AccountMeta::new(mint_b_account.pubkey(), true),
             // Wsol Mint
             AccountMeta::new_readonly(WSOL, false),
