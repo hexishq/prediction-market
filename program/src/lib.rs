@@ -240,19 +240,31 @@ fn place_bet(
 
     let prediction =
         bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
-            sol_log(&format!("Failed to deserialize prediction data: {e}"));
+            sol_log(&format!("Failed to deserialize prediction data: {e:?}"));
             ProgramError::InvalidAccountData
         })?;
 
     let creator_sol_account_data = creator_sol_account.try_borrow_data()?;
     let protocol_fee_account_data = protocol_fee_account.try_borrow_data()?;
 
-    if AtaAccessor::get_owner(&creator_sol_account_data) != prediction.creator {
+    if AtaAccessor::get_owner(&creator_sol_account_data).map_err(|e| {
+        sol_log(&format!(
+            "Failed to get owner of creator SOL account: {e:?}"
+        ));
+        e
+    })? != prediction.creator
+    {
         sol_log("Creator SOL account isn't owned by the prediction creator");
         return Err(ProgramError::IllegalOwner);
     }
 
-    if AtaAccessor::get_owner(&protocol_fee_account_data) != FEE_WALLET {
+    if AtaAccessor::get_owner(&protocol_fee_account_data).map_err(|e| {
+        sol_log(&format!(
+            "Failed to get owner of protocol fee account: {e:?}"
+        ));
+        e
+    })? != FEE_WALLET
+    {
         sol_log("Protocol fee account isn't owned by the fee wallet");
         return Err(ProgramError::IllegalOwner);
     }
@@ -310,12 +322,20 @@ fn place_bet(
     let user_vault_data = user_token_account.try_borrow_data()?;
     let user_sol_account_data = user_sol_account.try_borrow_data()?;
 
-    if AtaAccessor::get_mint(&user_vault_data) != mint_to_transfer {
+    if AtaAccessor::get_mint(&user_vault_data).map_err(|e| {
+        sol_log(&format!("Failed to get mint of user token account: {e:?}"));
+        e
+    })? != mint_to_transfer
+    {
         sol_log("User token account mint does not match the selected option");
         return Err(ProgramError::InvalidAccountData);
     }
 
-    if AtaAccessor::get_amount(&user_sol_account_data) < amount {
+    if AtaAccessor::get_amount(&user_sol_account_data).map_err(|e| {
+        sol_log(&format!("Failed to get amount of user SOL account: {e:?}"));
+        e
+    })? < amount
+    {
         sol_log("Insufficient SOL balance in user account");
         return Err(ProgramError::InsufficientFunds);
     }
@@ -409,11 +429,17 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
         .next()
         .ok_or(ProgramError::InvalidAccountData)?;
 
-    let user_token_account_mint = AtaAccessor::get_mint(&user_token_account.try_borrow_data()?);
+    let user_token_account_mint = AtaAccessor::get_mint(&user_token_account.try_borrow_data()?)
+        .map_err(|e| {
+            sol_log(&format!(
+                "Failed to get mint from user token account: {e:?}"
+            ));
+            e
+        })?;
     let prediction_data = prediction_account.try_borrow_data()?;
 
     let prediction = bytemuck::try_from_bytes::<Prediction>(&prediction_data).map_err(|e| {
-        sol_log(&format!("Failed to deserialize prediction account: {e}"));
+        sol_log(&format!("Failed to deserialize prediction account: {e:?}"));
         ProgramError::InvalidAccountData
     })?;
 
@@ -441,7 +467,11 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    let user_token_amount = AtaAccessor::get_amount(&user_token_account.try_borrow_data()?);
+    let user_token_amount = AtaAccessor::get_amount(&user_token_account.try_borrow_data()?)
+        .map_err(|e| {
+            sol_log(&format!("Error getting user token amount: {e:?}"));
+            e
+        })?;
 
     let amount_won = user_token_amount
         .checked_div(prediction.total_amount)
