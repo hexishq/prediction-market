@@ -3,6 +3,7 @@ mod command;
 pub use command::*;
 use {
     clap::{Parser, Subcommand},
+    hexis_prediction_market_interface::Prediction,
     solana_cli_config::Config,
     solana_client::rpc_client::RpcClient,
     solana_commitment_config::CommitmentConfig,
@@ -147,4 +148,29 @@ pub fn run(config: Arc<Config>, command: Command) -> CliResult<()> {
     }
 
     Ok(())
+}
+
+fn read_prediction_market_account(account_data: &[u8]) -> Prediction {
+    Prediction {
+        creator: account_data[0..32]
+            .try_into()
+            .expect("Failed to read creator pubkey"),
+        gamble_token_a_mint: account_data[32..64]
+            .try_into()
+            .expect("Failed to read gamble token A mint"),
+        gamble_token_b_mint: account_data[64..96]
+            .try_into()
+            .expect("Failed to read gamble token B mint"),
+        total_amount: u64::from_le_bytes(
+            account_data[96..104]
+                .try_into()
+                .expect("Failed to read total_amount"),
+        ),
+        winner: u8::from_le_bytes(
+            account_data[104..105]
+                .try_into()
+                .expect("Failed to read winner"),
+        ),
+        padding: account_data[105..112].try_into().expect("Missing padding"),
+    }
 }

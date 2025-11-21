@@ -1,10 +1,13 @@
 use {
     super::{CommandContext, RunCommand},
-    crate::CliResult,
+    crate::{read_prediction_market_account, CliError, CliResult, WSOL},
+    solana_message::{v0::Message, AccountMeta, Instruction},
     solana_pubkey::Pubkey,
-    tracing::info,
+    solana_signer::Signer,
+    solana_transaction::Transaction,
+    tracing::{error, info},
 };
-
+const CLAIM_INSTRUCTION: u8 = 3;
 pub struct ClaimCommand {
     market: Pubkey,
 }
@@ -16,10 +19,76 @@ impl ClaimCommand {
 }
 
 impl RunCommand for ClaimCommand {
-    fn run(&self, _context: CommandContext) -> CliResult<()> {
+    fn run(&self, context: CommandContext) -> CliResult<()> {
         info!("Claiming winnings from prediction market...");
         info!("Market: {}", self.market);
+        let market_data = context
+            .client
+            .get_account_data(&self.market)
+            .map_err(|err| {
+                error!("Failed to get account data: {}", err);
+                err
+            })?;
+
+        let market = read_prediction_market_account(&market_data);
+        let mint_pubkey = if market.winner == 1 {
+            market.gamble_token_a_mint
+        } else {
+            market.gamble_token_b_mint
+        };
+
+        let ix_data = [CLAIM_INSTRUCTION];
+        let ix_accounts =
+            self.get_accounts_metadata(&context.keypair.pubkey(), &self.market, &mint_pubkey);
+        let ix = Instruction {
+            program_id: market.program_id,
+            accounts: ix_accounts,
+            data: ix_data.to_vec(),
+        };
+
+        let tx = Transaction::new_signed_with_payer(
+            &[ix],
+            Some(&context.keypair.pubkey()),
+            &[&context.keypair],
+            context.client.get_latest_blockhash().map_err(|e| {
+                error!("Failed to compile message: {}", e);
+                e
+            })?,
+        );
+
+        context
+            .client
+            .send_and_confirm_transaction(&tx)
+            .map_err(|e| {
+                error!("Failed to send transaction: {}", e);
+                e
+            })?;
+
         info!("This command is not yet implemented");
         Ok(())
+    }
+}
+
+impl ClaimCommand {
+    fn get_accounts_metadata(
+        &self,
+        signer_pubkey: &Pubkey,
+        pool_id: &Pubkey,
+        mint_account: &Pubkey,
+    ) -> Vec<AccountMeta> {
+        let user_token_account = spl_associated_token_account::get_associated_token_address(
+            &mint_account,
+            &signer_pubkey,
+        );
+        let pool_sol_vault =
+            spl_associated_token_account::get_associated_token_address(&pool_id, &WSOL);
+
+        vec![
+            AccountMeta::new(*signer_pubkey, true),
+            AccountMeta::new(user_token_account, false),
+            AccountMeta::new(*mint_account, false),
+            AccountMeta::new(pool_sol_vault, false),
+            AccountMeta::new_readonly(*pool_id, false),
+        ]
     }
 }
