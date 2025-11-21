@@ -1,5 +1,5 @@
 [workspace]
-members = ["program"]
+members = [ "cli","program"]
 resolver = "2"
 
 [workspace.package]
@@ -8,8 +8,17 @@ edition = "2021"
 
 [workspace.dependencies]
 bytemuck = { version = "1.24.0", features = ["derive"] }
-solana-keypair = "2.2.0"
-solana-pubkey = "3.0"
-solana-account = "3.0"
+solana-keypair = "3.1.0"
+solana-pubkey = "4.0.0"
+solana-account = "3.2.0"
 solana-transaction = "3.0"
-solana-instruction = "3.0"
+solana-instruction = "3.1.0"
+solana-signer = "3.0"
+solana-message = "3.0"
+solana-commitment-config = "3.0"
+solana-cli-config = "3.1.1"
+solana-client = "3.1.1"
+clap = { version = "4.5.53", features = ["derive"] }
+thiserror = "2.0.17"
+tracing = "0.1.41"
+tracing-subscriber = "0.3"
