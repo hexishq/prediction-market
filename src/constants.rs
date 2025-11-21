@@ -17,4 +17,6 @@ pub const FEE_WALLET: Pubkey = [
 
 pub const BASIS_POINT: u64 = 10_000;
 
-pub const FEE_BPS: u64 = 12500;
+pub const FEE_BPS: u64 = 125;
+
+pub const DEFAULT_DECIMALS: u8 = 9;

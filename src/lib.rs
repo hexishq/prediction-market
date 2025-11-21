@@ -1,10 +1,7 @@
 #![allow(unexpected_cfgs)]
 
 use {
-    crate::{
-        constants::{FEE_BPS, FEE_WALLET},
-        utils::{initialize_mint, transfer_fee},
-    },
+    crate::constants::{BASIS_POINT, DEFAULT_DECIMALS, FEE_BPS, FEE_WALLET},
     bytemuck::{Pod, Zeroable},
     pinocchio::{
         account_info::AccountInfo,
@@ -18,7 +15,6 @@ use {
 };
 mod ata_accessor;
 mod constants;
-mod utils;
 
 use ata_accessor::*;
 
@@ -171,8 +167,23 @@ fn create(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     }
 
     // Initializes both mint accounts (but doesn't mint any tokens yet)
-    initialize_mint(9, mint_a_account, program_id, Some(program_id))?;
-    initialize_mint(9, mint_b_account, program_id, Some(program_id))?;
+    pinocchio_token_2022::instructions::InitializeMint2 {
+        mint: mint_a_account,
+        decimals: DEFAULT_DECIMALS,
+        mint_authority: program_id,
+        freeze_authority: Some(program_id),
+        token_program: &constants::TOKEN_PROGRAM_2022,
+    }
+    .invoke()?;
+
+    pinocchio_token_2022::instructions::InitializeMint2 {
+        mint: mint_b_account,
+        decimals: DEFAULT_DECIMALS,
+        mint_authority: program_id,
+        freeze_authority: Some(program_id),
+        token_program: &constants::TOKEN_PROGRAM_2022,
+    }
+    .invoke()?;
 
     // Create prediction account
     pinocchio_system::instructions::CreateAccount {
@@ -273,23 +284,35 @@ fn place_bet(
         return Err(ProgramError::IllegalOwner);
     }
 
-    let creator_fee = transfer_fee(
-        amount,
-        FEE_BPS,
-        user_sol_account,
-        creator_sol_account,
-        gambler_account,
-        &constants::TOKEN_PROGRAM,
-    )?;
+    let creator_fee = amount
+        .checked_mul(FEE_BPS)
+        .ok_or(ProgramError::ArithmeticOverflow)?
+        .checked_div(BASIS_POINT)
+        .ok_or(ProgramError::ArithmeticOverflow)?;
 
-    let protocol_fee = transfer_fee(
-        amount,
-        FEE_BPS,
-        user_sol_account,
-        protocol_fee_account,
-        gambler_account,
-        &constants::TOKEN_PROGRAM,
-    )?;
+    pinocchio_token_2022::instructions::Transfer {
+        from: user_sol_account,
+        to: creator_sol_account,
+        authority: gambler_account,
+        amount: creator_fee,
+        token_program: &constants::TOKEN_PROGRAM,
+    }
+    .invoke()?;
+
+    let protocol_fee = amount
+        .checked_mul(FEE_BPS)
+        .ok_or(ProgramError::ArithmeticOverflow)?
+        .checked_div(BASIS_POINT)
+        .ok_or(ProgramError::ArithmeticOverflow)?;
+
+    pinocchio_token_2022::instructions::Transfer {
+        from: user_sol_account,
+        to: protocol_fee_account,
+        authority: gambler_account,
+        amount: protocol_fee,
+        token_program: &constants::TOKEN_PROGRAM,
+    }
+    .invoke()?;
 
     let total_fee = creator_fee
         .checked_add(protocol_fee)
@@ -329,7 +352,9 @@ fn place_bet(
         from: user_sol_account,
         to: pool_sol_vault_account,
         authority: gambler_account,
-        amount: amount.saturating_sub(total_fee),
+        amount: amount
+            .checked_sub(total_fee)
+            .ok_or(ProgramError::ArithmeticOverflow)?,
         token_program: &constants::TOKEN_PROGRAM,
     }
     .invoke()?;
@@ -339,7 +364,9 @@ fn place_bet(
         mint: mint_account,
         account: user_token_account,
         mint_authority: prediction_account,
-        amount: amount.saturating_sub(total_fee),
+        amount: amount
+            .checked_sub(total_fee)
+            .ok_or(ProgramError::ArithmeticOverflow)?,
         token_program: &constants::TOKEN_PROGRAM_2022,
     }
     .invoke()?;
