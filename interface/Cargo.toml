@@ -1,0 +1,6 @@
+[package]
+name = "hexis-prediction-market-interface"
+edition = "2021"
+
+[dependencies]
+bytemuck = { workspace = true }

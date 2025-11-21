@@ -2,7 +2,7 @@
 
 use {
     crate::constants::{BASIS_POINT, DEFAULT_DECIMALS, FEE_BPS, FEE_WALLET},
-    bytemuck::{Pod, Zeroable},
+    hexis_prediction_market_interface::{Prediction, PredictionInstruction},
     pinocchio::{
         account_info::AccountInfo,
         entrypoint,
@@ -20,68 +20,37 @@ use ata_accessor::*;
 
 entrypoint!(process_instruction);
 
-#[repr(C, packed)]
-#[derive(Copy, Clone, Zeroable, Pod)]
-pub struct Prediction {
-    // Prediction creator (who created the bet), has authority to end it.
-    pub creator: Pubkey,
-    // Tokens created for the pool, these are needed so we can know how much and if a user bet
-    // on a determined side of the prediction.
-    pub gamble_token_a_mint: Pubkey,
-    pub gamble_token_b_mint: Pubkey,
-    // Total amount of SOL deposited into the pool.
-    pub total_amount: u64,
-    // Which side won the prediction (0 = prediction active, 1 = Side 1 won, 2 = Side 2 won)
-    pub winner: u8,
-    // Padding to ensure alignment
-    pub padding: [u8; 7],
-}
+// Unpack the instruction data into a known instruction
+pub fn unpack(input: &[u8]) -> Result<PredictionInstruction, ProgramError> {
+    let (discriminator, rest) = input
+        .split_first()
+        .ok_or(ProgramError::InvalidInstructionData)?;
 
-/// Instructions used to interact with onchain program
-pub enum PredictionInstruction {
-    /// Creates a new prediction
-    CreatePrediction {},
-    /// Ends an existant prediction
-    EndPrediction { winner: u8 },
-    /// Bets on some side of the prediction
-    PlaceBet { option: u8, amount: u64 },
-    /// Claim SOL winnings after prediction has ended, if the user won
-    Claim,
-}
+    // Each brace has error handling for each instruction parsing
+    Ok(match discriminator {
+        // Create doesn't have any instruction data, since it just initializes a prediction (for now)
+        0 => PredictionInstruction::CreatePrediction {},
+        1 => {
+            let option = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
+            let amount = rest
+                .get(1..9)
+                .and_then(|slice| slice.try_into().ok())
+                .map(u64::from_le_bytes)
+                .ok_or(ProgramError::InvalidInstructionData)?;
 
-impl PredictionInstruction {
-    // Unpack the instruction data into a known instruction
-    pub fn unpack(input: &[u8]) -> Result<Self, ProgramError> {
-        let (discriminator, rest) = input
-            .split_first()
-            .ok_or(ProgramError::InvalidInstructionData)?;
-
-        // Each brace has error handling for each instruction parsing
-        Ok(match discriminator {
-            // Create doesn't have any instruction data, since it just initializes a prediction (for now)
-            0 => Self::CreatePrediction {},
-            1 => {
-                let option = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
-                let amount = rest
-                    .get(1..9)
-                    .and_then(|slice| slice.try_into().ok())
-                    .map(u64::from_le_bytes)
-                    .ok_or(ProgramError::InvalidInstructionData)?;
-
-                Self::PlaceBet {
-                    option: *option,
-                    amount,
-                }
+            PredictionInstruction::PlaceBet {
+                option: *option,
+                amount,
             }
-            2 => {
-                let winner = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
-                Self::EndPrediction { winner: *winner }
-            }
-            // Claim doesn't have any instruction data, since all that is needed is user token vault
-            3 => Self::Claim,
-            _ => return Err(ProgramError::InvalidInstructionData),
-        })
-    }
+        }
+        2 => {
+            let winner = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
+            PredictionInstruction::EndPrediction { winner: *winner }
+        }
+        // Claim doesn't have any instruction data, since all that is needed is user token vault
+        3 => PredictionInstruction::Claim,
+        _ => return Err(ProgramError::InvalidInstructionData),
+    })
 }
 
 pub fn process_instruction(
@@ -89,7 +58,7 @@ pub fn process_instruction(
     accounts: &[AccountInfo],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    let instruction = PredictionInstruction::unpack(instruction_data)?;
+    let instruction = unpack(instruction_data)?;
 
     match instruction {
         PredictionInstruction::CreatePrediction {} => {
