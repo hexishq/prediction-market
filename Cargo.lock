@@ -1774,6 +1774,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 
 [[package]]
+name = "hexis-prediction-market-interface"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
+name = "hexis-prediction-market-program"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "hexis-prediction-market-interface",
+ "mollusk-svm",
+ "pinocchio",
+ "pinocchio-associated-token-account",
+ "pinocchio-system",
+ "pinocchio-token-2022",
+ "solana-account 3.2.0",
+ "solana-instruction 3.1.0",
+ "solana-keypair",
+ "solana-pubkey 4.0.0",
+ "solana-transaction",
+]
+
+[[package]]
 name = "histogram"
 version = "0.6.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4539,23 +4564,6 @@ checksum = "33adf673581c38e810bf618f745bf31b683a0a4a4377682e6aaac5d9a058dd4e"
 dependencies = [
  "solana-message 2.4.0",
  "solana-native-token 2.3.0",
-]
-
-[[package]]
-name = "solana-gamble-program"
-version = "0.0.0"
-dependencies = [
- "bytemuck",
- "mollusk-svm",
- "pinocchio",
- "pinocchio-associated-token-account",
- "pinocchio-system",
- "pinocchio-token-2022",
- "solana-account 3.2.0",
- "solana-instruction 3.1.0",
- "solana-keypair",
- "solana-pubkey 4.0.0",
- "solana-transaction",
 ]
 
 [[package]]
