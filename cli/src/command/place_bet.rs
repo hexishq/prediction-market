@@ -86,7 +86,7 @@ impl RunCommand for PlaceBetCommand {
             &WSOL,
         );
 
-        let protocol_fee_acount =
+        let protocol_fee_account =
             spl_associated_token_account::get_associated_token_address(&FEE_WALLET, &WSOL);
 
         let accounts = vec![
@@ -97,7 +97,7 @@ impl RunCommand for PlaceBetCommand {
             AccountMeta::new(user_token_account, false),
             AccountMeta::new_readonly(token_mint, false),
             AccountMeta::new_readonly(creator_sol_account, false),
-            AccountMeta::new_readonly(protocol_fee_acount, false),
+            AccountMeta::new_readonly(protocol_fee_account, false),
             AccountMeta::new_readonly(TOKEN_PROGRAM_ID, false),
             AccountMeta::new_readonly(TOKEN_PROGRAM_2022_ID, false),
         ];
