@@ -63,7 +63,7 @@ impl RunCommand for EndCommand {
             },
         ) {
             Ok(_) => info!(
-                "Prediction {} successfully ended, winner is {} !",
+                "Prediction {} successfully ended, winner is {}!",
                 self.market, self.winner
             ),
             Err(e) => error!("Prediction settle failed for {}, error: {}", self.market, e),
