@@ -10,7 +10,7 @@ use {
     solana_pubkey::Pubkey,
     solana_signer::Signer,
     solana_transaction::versioned::VersionedTransaction,
-    tracing::info,
+    tracing::{error, info},
 };
 
 pub struct CreateCommand;
@@ -37,9 +37,6 @@ impl RunCommand for CreateCommand {
         let mint_a_account = Keypair::new();
 
         let mint_b_account = Keypair::new();
-
-        println!("Mint A: {}", mint_a_account.pubkey());
-        println!("Mint B: {}", mint_b_account.pubkey());
 
         let accounts = vec![
             AccountMeta::new(signer.pubkey(), true),
@@ -102,7 +99,7 @@ impl RunCommand for CreateCommand {
                 "Prediction {} successfully created!",
                 prediction_account.pubkey()
             ),
-            Err(e) => tracing::error!(
+            Err(e) => error!(
                 "Prediction creation failed for {}, error: {}",
                 prediction_account.pubkey(),
                 e
