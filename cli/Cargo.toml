@@ -1,0 +1,23 @@
+[package]
+name = "prediction-market-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "prediction-market"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+solana-cli-config = { workspace = true }
+solana-client = { workspace = true }
+solana-keypair = { workspace = true }
+solana-pubkey = { workspace = true }
+solana-signer = { workspace = true }
+solana-instruction = { workspace = true }
+solana-message = { workspace = true }
+solana-transaction = { workspace = true }
+solana-commitment-config = { workspace = true }
