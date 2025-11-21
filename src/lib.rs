@@ -21,7 +21,6 @@ use ata_accessor::*;
 
 entrypoint!(process_instruction);
 
-// We Define the data structures for the program
 #[repr(C, packed)]
 #[derive(Copy, Clone, Zeroable, Pod)]
 pub struct Prediction {
