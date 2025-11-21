@@ -1,7 +1,7 @@
 use {
     super::{CommandContext, RunCommand},
     crate::{
-        CliResult, ASSOCIATED_TOKEN_PROGRAM_ID, PROGRAM_ID, TOKEN_PROGRAM_2022_ID,
+        CliResult, ASSOCIATED_TOKEN_PROGRAM_ID, FEE_WALLET, PROGRAM_ID, TOKEN_PROGRAM_2022_ID,
         TOKEN_PROGRAM_ID, WSOL,
     },
     solana_client::rpc_config::UiTransactionEncoding,
@@ -66,11 +66,33 @@ impl RunCommand for CreateCommand {
             data: vec![0],
         };
 
+        // Adding it here to ensure the creator's SOL ATA exists (easier to test)
+        let create_creator_sol_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &context.keypair.pubkey(),
+                &context.keypair.pubkey(),
+                &WSOL,
+                &TOKEN_PROGRAM_ID,
+            );
+
+        // This isn't needed on production, but it's useful for testing
+        let protocol_fee_sol_ata_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &context.keypair.pubkey(),
+                &FEE_WALLET,
+                &WSOL,
+                &TOKEN_PROGRAM_ID,
+            );
+
         let transaction = VersionedTransaction::try_new(
             VersionedMessage::V0(
                 Message::try_compile(
                     &signer.pubkey(),
-                    &[create_prediction_ix],
+                    &[
+                        create_creator_sol_ata_ix,
+                        protocol_fee_sol_ata_ix,
+                        create_prediction_ix,
+                    ],
                     &[],
                     context
                         .client

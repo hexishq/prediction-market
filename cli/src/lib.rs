@@ -16,6 +16,7 @@ const DEVNET: &str = "https://api.devnet.solana.com";
 const MAINNET_BETA: &str = "https://api.mainnet-beta.solana.com";
 const LOCALHOST: &str = "http://localhost:8899";
 const WSOL: Pubkey = Pubkey::from_str_const("So11111111111111111111111111111111111111112");
+const FEE_WALLET: Pubkey = Pubkey::from_str_const("jTGZDz9DATMcQ4fT4MKiABXYHgCF62UTAoj44PYGjQQ");
 
 const TOKEN_PROGRAM_ID: Pubkey =
     Pubkey::from_str_const("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
