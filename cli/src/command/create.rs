@@ -27,12 +27,13 @@ impl RunCommand for CreateCommand {
 
         let signer = &context.keypair;
 
-        let prediction_account = Keypair::new();
-
-        let prediction_sol_vault = spl_associated_token_account::get_associated_token_address(
-            &prediction_account.pubkey(),
-            &WSOL,
+        let (prediction_account, bump) = Pubkey::find_program_address(
+            &[b"prediction", &signer.pubkey().to_bytes()],
+            &PROGRAM_ID,
         );
+
+        let prediction_sol_vault =
+            spl_associated_token_account::get_associated_token_address(&prediction_account, &WSOL);
 
         let mint_a_account = Keypair::new();
 
@@ -41,7 +42,7 @@ impl RunCommand for CreateCommand {
         let accounts = vec![
             AccountMeta::new(signer.pubkey(), true),
             // Prediction market account (to be created)
-            AccountMeta::new(prediction_account.pubkey(), true),
+            AccountMeta::new(prediction_account, false),
             // SOL vault account (associated token account)
             AccountMeta::new(prediction_sol_vault, false),
             // Mint A account (keypair-based)
@@ -60,10 +61,13 @@ impl RunCommand for CreateCommand {
             AccountMeta::new_readonly(ASSOCIATED_TOKEN_PROGRAM_ID, false),
         ];
 
+        let mut instruction_data = vec![0];
+        instruction_data.extend_from_slice(&bump.to_le_bytes());
+
         let create_prediction_ix = Instruction {
             program_id: PROGRAM_ID,
             accounts,
-            data: vec![0],
+            data: instruction_data,
         };
 
         // Adding it here to ensure the creator's SOL ATA exists (easier to test)
@@ -101,15 +105,9 @@ impl RunCommand for CreateCommand {
                 )
                 .expect("Failed to build VersionedMessage"),
             ),
-            &[
-                signer,
-                &prediction_account,
-                &mint_a_account,
-                &mint_b_account,
-            ],
+            &[signer, &mint_a_account, &mint_b_account],
         )
         .expect("Failed to build versioned transaction");
-
         match context.client.send_transaction_with_config(
             &transaction,
             solana_client::rpc_config::RpcSendTransactionConfig {
@@ -117,14 +115,10 @@ impl RunCommand for CreateCommand {
                 ..Default::default()
             },
         ) {
-            Ok(_) => info!(
-                "Prediction {} successfully created!",
-                prediction_account.pubkey()
-            ),
+            Ok(_) => info!("Prediction {} successfully created!", prediction_account),
             Err(e) => error!(
                 "Prediction creation failed for {}, error: {}",
-                prediction_account.pubkey(),
-                e
+                prediction_account, e
             ),
         }
 

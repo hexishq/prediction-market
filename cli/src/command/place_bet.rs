@@ -41,6 +41,9 @@ impl RunCommand for PlaceBetCommand {
 
         let prediction = read_prediction_market_account(&market_account.data);
 
+        let (prediction_account, _bump) =
+            Pubkey::find_program_address(&[b"prediction", &prediction.creator], &PROGRAM_ID);
+
         let prediction_sol_vault =
             spl_associated_token_account::get_associated_token_address(&self.market, &WSOL);
 
@@ -101,17 +104,20 @@ impl RunCommand for PlaceBetCommand {
 
         let accounts = vec![
             AccountMeta::new(gambler_account, true),
-            AccountMeta::new(self.market, false),
+            AccountMeta::new(prediction_account, false),
             AccountMeta::new(prediction_sol_vault, false),
             AccountMeta::new(user_sol_account, false),
             AccountMeta::new(user_token_account, false),
-            AccountMeta::new_readonly(token_mint, false),
+            AccountMeta::new(token_mint, false),
             AccountMeta::new(creator_sol_account, false),
             AccountMeta::new(protocol_fee_account, false),
             AccountMeta::new_readonly(TOKEN_PROGRAM_ID, false),
             AccountMeta::new_readonly(TOKEN_PROGRAM_2022_ID, false),
         ];
 
+        for (index, acc) in accounts.iter().enumerate() {
+            info!("Account {}: {:?}", index, acc);
+        }
         // Discriminator
         let mut instruction_data = vec![1];
         instruction_data.push(self.option);

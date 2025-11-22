@@ -6,9 +6,10 @@ use {
     pinocchio::{
         account_info::AccountInfo,
         entrypoint,
+        instruction::{Seed, Signer},
         log::sol_log,
         program_error::ProgramError,
-        pubkey::Pubkey,
+        pubkey::{create_program_address, find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
@@ -29,7 +30,10 @@ pub fn unpack(input: &[u8]) -> Result<PredictionInstruction, ProgramError> {
     // Each brace has error handling for each instruction parsing
     Ok(match discriminator {
         // Create doesn't have any instruction data, since it just initializes a prediction (for now)
-        0 => PredictionInstruction::CreatePrediction {},
+        0 => {
+            let bump = *rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
+            PredictionInstruction::CreatePrediction { bump }
+        }
         1 => {
             let option = rest.get(0).ok_or(ProgramError::InvalidInstructionData)?;
             let amount = rest
@@ -61,9 +65,9 @@ pub fn process_instruction(
     let instruction = unpack(instruction_data)?;
 
     match instruction {
-        PredictionInstruction::CreatePrediction {} => {
+        PredictionInstruction::CreatePrediction { bump } => {
             sol_log("Instruction: CreateBet");
-            create(program_id, accounts)
+            create(program_id, accounts, bump)
         }
         PredictionInstruction::PlaceBet { option, amount } => {
             sol_log("Instruction: PlaceBet");
@@ -75,13 +79,13 @@ pub fn process_instruction(
         }
         PredictionInstruction::Claim => {
             sol_log("Instruction: Claim");
-            claim(accounts)
+            claim(program_id, accounts)
         }
     }
 }
 
 /// Initializes a new prediction
-fn create(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
+fn create(program_id: &Pubkey, accounts: &[AccountInfo], bump: u8) -> ProgramResult {
     let accounts_iter = &mut accounts.iter();
 
     let creator_account = accounts_iter
@@ -116,6 +120,26 @@ fn create(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         .next()
         .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
+    let (prediction_pda, _) =
+        find_program_address(&[b"prediction", creator_account.key()], program_id);
+
+    if prediction_pda != *prediction_account.key() {
+        sol_log("Prediction account doesn't match the PDA");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    let prediction = unsafe {
+        &mut *(prediction_account.try_borrow_mut_data()?.as_mut_ptr() as *mut Prediction)
+    };
+
+    // Necessary binding
+    let bump = [bump];
+    let prediction_seeds = [
+        Seed::from(b"prediction"),
+        Seed::from(creator_account.key().as_ref()),
+        Seed::from(&bump),
+    ];
+
     // Create prediction account
     pinocchio_system::instructions::CreateAccount {
         from: creator_account,
@@ -124,11 +148,7 @@ fn create(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         space: std::mem::size_of::<Prediction>() as u64,
         owner: program_id,
     }
-    .invoke()?;
-
-    let prediction = unsafe {
-        &mut *(prediction_account.try_borrow_mut_data()?.as_mut_ptr() as *mut Prediction)
-    };
+    .invoke_signed(&[Signer::from(&prediction_seeds)])?;
 
     // Create mint accounts
     pinocchio_system::instructions::CreateAccount {
@@ -186,6 +206,7 @@ fn create(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     prediction.winner = 0;
     prediction.gamble_token_a_mint = *mint_a_account.key();
     prediction.gamble_token_b_mint = *mint_b_account.key();
+    prediction.bump = bump[0];
 
     Ok(())
 }
@@ -224,17 +245,28 @@ fn place_bet(
         .next()
         .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
-    let creator_sol_account = accounts_iter
-        .next()
-        .ok_or(ProgramError::NotEnoughAccountKeys)?;
-
     let protocol_fee_account = accounts_iter
         .next()
         .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
-    if *prediction_account.owner() != *program_id {
-        sol_log("Prediction account not owned by the program");
-        return Err(ProgramError::IncorrectProgramId);
+    let creator_sol_account = accounts_iter
+        .next()
+        .ok_or(ProgramError::NotEnoughAccountKeys)?;
+
+    let mut prediction_data = prediction_account.try_borrow_mut_data()?;
+
+    let prediction =
+        bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
+            sol_log(&format!("Failed to deserialize prediction data: {e}"));
+            ProgramError::InvalidAccountData
+        })?;
+
+    let (prediction_pda, _) =
+        find_program_address(&[b"prediction", &prediction.creator], program_id);
+
+    if prediction_pda != *prediction_account.key() {
+        sol_log("Prediction account doesn't match the PDA");
+        return Err(ProgramError::InvalidAccountData);
     }
 
     let creator_fee = amount
@@ -266,11 +298,6 @@ fn place_bet(
         token_program: &constants::TOKEN_PROGRAM,
     }
     .invoke()?;
-
-    if AtaAccessor::get_owner(&protocol_fee_account.try_borrow_data()?)? != FEE_WALLET {
-        sol_log("Protocol fee account isn't owned by the fee wallet");
-        return Err(ProgramError::IllegalOwner);
-    }
 
     let total_fee = creator_fee
         .checked_add(protocol_fee)
@@ -336,6 +363,14 @@ fn place_bet(
     }
     .invoke()?;
 
+    // Necessary binding
+    let bump = [prediction.bump];
+    let prediction_seeds = [
+        Seed::from(b"prediction"),
+        Seed::from(&prediction.creator),
+        Seed::from(&bump),
+    ];
+
     // Minting the corresponding tokens to the user
     pinocchio_token_2022::instructions::MintTo {
         mint: mint_account,
@@ -346,7 +381,7 @@ fn place_bet(
             .ok_or(ProgramError::ArithmeticOverflow)?,
         token_program: &constants::TOKEN_PROGRAM_2022,
     }
-    .invoke()?;
+    .invoke_signed(&[Signer::from(&prediction_seeds)])?;
 
     let user_vault_data = user_token_account.try_borrow_data()?;
     let user_sol_account_data = user_sol_account.try_borrow_data()?;
@@ -359,6 +394,11 @@ fn place_bet(
     if AtaAccessor::get_amount(&user_sol_account_data)? < amount {
         sol_log("Insufficient SOL balance in user account");
         return Err(ProgramError::InsufficientFunds);
+    }
+
+    if AtaAccessor::get_owner(&protocol_fee_account.try_borrow_data()?)? != FEE_WALLET {
+        sol_log("Protocol fee account isn't owned by the fee wallet");
+        return Err(ProgramError::IllegalOwner);
     }
 
     Ok(())
@@ -376,9 +416,12 @@ fn end_prediction(program_id: &Pubkey, accounts: &[AccountInfo], winner: u8) -> 
         .next()
         .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
-    if *prediction_account.owner() != *program_id {
-        sol_log("Prediction account not owned by the program");
-        return Err(ProgramError::IncorrectProgramId);
+    let (prediction_pda, _) =
+        find_program_address(&[b"prediction", creator_account.key().as_ref()], program_id);
+
+    if prediction_pda != *prediction_account.key() {
+        sol_log("Prediction account doesn't match the PDA");
+        return Err(ProgramError::InvalidAccountData);
     }
 
     let mut prediction_data = prediction_account.try_borrow_mut_data()?;
@@ -401,8 +444,7 @@ fn end_prediction(program_id: &Pubkey, accounts: &[AccountInfo], winner: u8) -> 
     Ok(())
 }
 
-// [signer, user_token_account, mint_account, pool_sol_vault, pool_account]
-fn claim(accounts: &[AccountInfo]) -> ProgramResult {
+fn claim(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
     let mut accounts_iter = accounts.iter();
 
     let signer = accounts_iter
@@ -432,6 +474,14 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
         sol_log(&format!("Failed to deserialize prediction account: {e}"));
         ProgramError::InvalidAccountData
     })?;
+
+    let (prediction_pda, _) =
+        find_program_address(&[b"prediction", prediction.creator.as_ref()], program_id);
+
+    if prediction_pda != *prediction_account.key() {
+        sol_log("Prediction account doesn't match the PDA");
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     // Check if the prediction has been settled
     if prediction.winner == 0 {

@@ -14,14 +14,16 @@ pub struct Prediction {
     pub total_token_b: u64,
     // Which side won the prediction (0 = prediction active, 1 = Side 1 won, 2 = Side 2 won)
     pub winner: u8,
+    // Bump (seed) of the prediction PDA
+    pub bump: u8,
     // Padding to ensure alignment
-    pub padding: [u8; 7],
+    pub padding: [u8; 6],
 }
 
 /// Instructions used to interact with onchain program
 pub enum PredictionInstruction {
     /// Creates a new prediction
-    CreatePrediction {},
+    CreatePrediction { bump: u8 },
     /// Ends an existant prediction
     EndPrediction { winner: u8 },
     /// Bets on some side of the prediction

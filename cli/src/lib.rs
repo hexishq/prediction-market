@@ -24,7 +24,7 @@ const TOKEN_PROGRAM_2022_ID: Pubkey =
 
 const ASSOCIATED_TOKEN_PROGRAM_ID: Pubkey = spl_associated_token_account::ID;
 
-const PROGRAM_ID: Pubkey = Pubkey::from_str_const("6w3daRgCgWgbvkTCXgzP5X3qYXYABpiiFWgLU6HfeJPw"); // Placeholder
+const PROGRAM_ID: Pubkey = Pubkey::from_str_const("6w3daRgCgWgbvkTCXgzP5X3qYXYABpiiFWgLU6HfeJPw");
 
 #[derive(Debug, Parser)]
 #[command(
@@ -165,6 +165,7 @@ fn read_prediction_market_account(account_data: &[u8]) -> Prediction {
                 .try_into()
                 .expect("Failed to read winner"),
         ),
-        padding: account_data[113..120].try_into().expect("Missing padding"),
+        bump: u8::from_le_bytes(account_data[113..114].try_into().expect("Missing bump")),
+        padding: account_data[114..120].try_into().expect("Missing padding"),
     }
 }
