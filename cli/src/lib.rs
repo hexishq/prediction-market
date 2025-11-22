@@ -1,12 +1,12 @@
 mod command;
 
 pub use command::*;
-use hexis_prediction_market_interface::Prediction;
-use solana_pubkey::Pubkey;
 use {
     clap::{Parser, Subcommand},
+    hexis_prediction_market_interface::Prediction,
     solana_client::rpc_client::RpcClient,
     solana_keypair::read_keypair_file,
+    solana_pubkey::Pubkey,
     std::time::Duration,
 };
 

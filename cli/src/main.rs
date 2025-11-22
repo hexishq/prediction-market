@@ -1,5 +1,7 @@
-use clap::Parser;
-use prediction_market_cli::{run, Args, CliError};
+use {
+    clap::Parser,
+    prediction_market_cli::{run, Args, CliError},
+};
 
 fn main() -> Result<(), CliError> {
     tracing_subscriber::fmt()

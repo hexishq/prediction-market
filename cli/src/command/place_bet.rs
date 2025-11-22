@@ -115,9 +115,6 @@ impl RunCommand for PlaceBetCommand {
             AccountMeta::new_readonly(TOKEN_PROGRAM_2022_ID, false),
         ];
 
-        for (index, acc) in accounts.iter().enumerate() {
-            info!("Account {}: {:?}", index, acc);
-        }
         // Discriminator
         let mut instruction_data = vec![1];
         instruction_data.push(self.option);
