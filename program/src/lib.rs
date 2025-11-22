@@ -253,16 +253,29 @@ fn place_bet(
         .next()
         .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
-    let mut prediction_data = prediction_account.try_borrow_mut_data()?;
-
-    let prediction =
-        bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
+    let (
+        prediction_creator,
+        prediction_winner,
+        prediction_bump,
+        prediction_token_a,
+        prediction_token_b,
+    ) = {
+        let prediction_data = prediction_account.try_borrow_data()?;
+        let prediction = bytemuck::try_from_bytes::<Prediction>(&prediction_data).map_err(|e| {
             sol_log(&format!("Failed to deserialize prediction data: {e}"));
             ProgramError::InvalidAccountData
         })?;
+        (
+            prediction.creator,
+            prediction.winner,
+            prediction.bump,
+            prediction.gamble_token_a_mint,
+            prediction.gamble_token_b_mint,
+        )
+    };
 
     let (prediction_pda, _) =
-        find_program_address(&[b"prediction", &prediction.creator], program_id);
+        find_program_address(&[b"prediction", &prediction_creator], program_id);
 
     if prediction_pda != *prediction_account.key() {
         sol_log("Prediction account doesn't match the PDA");
@@ -303,47 +316,24 @@ fn place_bet(
         .checked_add(protocol_fee)
         .ok_or(ProgramError::ArithmeticOverflow)?;
 
-    let mint_to_transfer = {
-        let mut prediction_data = prediction_account.try_borrow_mut_data()?;
+    if AtaAccessor::get_owner(&creator_sol_account.try_borrow_data()?)? != prediction_creator {
+        sol_log("Creator SOL account isn't owned by the prediction creator");
+        return Err(ProgramError::IllegalOwner);
+    }
 
-        let prediction =
-            bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
-                sol_log(&format!("Failed to deserialize prediction data: {e}"));
-                ProgramError::InvalidAccountData
-            })?;
+    if prediction_winner != 0 {
+        sol_log("Prediction has already ended");
+        return Err(ProgramError::InvalidAccountData);
+    }
 
-        if AtaAccessor::get_owner(&creator_sol_account.try_borrow_data()?)? != prediction.creator {
-            sol_log("Creator SOL account isn't owned by the prediction creator");
-            return Err(ProgramError::IllegalOwner);
-        }
+    let net_amount = amount
+        .checked_sub(total_fee)
+        .ok_or(ProgramError::ArithmeticOverflow)?;
 
-        if prediction.winner != 0 {
-            sol_log("Prediction has already ended");
-            return Err(ProgramError::InvalidAccountData);
-        }
-
-        let net_amount = amount
-            .checked_sub(total_fee)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
-
-        // This works because token has equivalent decimals, so 1 lamport = token (for the program)
-        if option == 1 {
-            prediction.total_token_a = prediction
-                .total_token_a
-                .checked_add(net_amount)
-                .ok_or(ProgramError::ArithmeticOverflow)?;
-        } else {
-            prediction.total_token_b = prediction
-                .total_token_b
-                .checked_add(net_amount)
-                .ok_or(ProgramError::ArithmeticOverflow)?;
-        }
-
-        if option == 1 {
-            prediction.gamble_token_a_mint
-        } else {
-            prediction.gamble_token_b_mint
-        }
+    let mint_to_transfer = if option == 1 {
+        prediction_token_a
+    } else {
+        prediction_token_b
     };
 
     if ![1, 2].contains(&option) {
@@ -364,10 +354,11 @@ fn place_bet(
     .invoke()?;
 
     // Necessary binding
-    let bump = [prediction.bump];
+    let bump = [prediction_bump];
+    sol_log(&format!("{:?}", bump));
     let prediction_seeds = [
         Seed::from(b"prediction"),
-        Seed::from(&prediction.creator),
+        Seed::from(&prediction_creator),
         Seed::from(&bump),
     ];
 
@@ -399,6 +390,28 @@ fn place_bet(
     if AtaAccessor::get_owner(&protocol_fee_account.try_borrow_data()?)? != FEE_WALLET {
         sol_log("Protocol fee account isn't owned by the fee wallet");
         return Err(ProgramError::IllegalOwner);
+    }
+
+    // Only tries to borrow mutable data at the end, to avoid unnecessary borrows
+    let mut prediction_data = prediction_account.try_borrow_mut_data()?;
+
+    let prediction =
+        bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
+            sol_log(&format!("Failed to deserialize prediction data: {e}"));
+            ProgramError::InvalidAccountData
+        })?;
+
+    // This works because token has equivalent decimals, so 1 lamport = token (for the program)
+    if option == 1 {
+        prediction.total_token_a = prediction
+            .total_token_a
+            .checked_add(net_amount)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+    } else {
+        prediction.total_token_b = prediction
+            .total_token_b
+            .checked_add(net_amount)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
     }
 
     Ok(())
