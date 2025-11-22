@@ -59,10 +59,12 @@ impl RunCommand for PlaceBetCommand {
             &WSOL,
         );
 
-        let user_token_account = spl_associated_token_account::get_associated_token_address(
-            &context.keypair.pubkey(),
-            &token_mint,
-        );
+        let user_token_account =
+            spl_associated_token_account::get_associated_token_address_with_program_id(
+                &context.keypair.pubkey(),
+                &token_mint,
+                &TOKEN_PROGRAM_2022_ID,
+            );
 
         // Just to ensure easier testing
         let create_user_token_account_ix =
@@ -89,6 +91,14 @@ impl RunCommand for PlaceBetCommand {
         let protocol_fee_account =
             spl_associated_token_account::get_associated_token_address(&FEE_WALLET, &WSOL);
 
+        let create_protocol_fee_account_ix =
+            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+                &context.keypair.pubkey(),
+                &protocol_fee_account,
+                &WSOL,
+                &TOKEN_PROGRAM_ID,
+            );
+
         let accounts = vec![
             AccountMeta::new(gambler_account, true),
             AccountMeta::new(self.market, false),
@@ -96,8 +106,8 @@ impl RunCommand for PlaceBetCommand {
             AccountMeta::new(user_sol_account, false),
             AccountMeta::new(user_token_account, false),
             AccountMeta::new_readonly(token_mint, false),
-            AccountMeta::new_readonly(creator_sol_account, false),
-            AccountMeta::new_readonly(protocol_fee_account, false),
+            AccountMeta::new(creator_sol_account, false),
+            AccountMeta::new(protocol_fee_account, false),
             AccountMeta::new_readonly(TOKEN_PROGRAM_ID, false),
             AccountMeta::new_readonly(TOKEN_PROGRAM_2022_ID, false),
         ];
@@ -119,6 +129,7 @@ impl RunCommand for PlaceBetCommand {
                 Message::try_compile(
                     &context.keypair.pubkey(),
                     &[
+                        create_protocol_fee_account_ix,
                         create_user_token_account_ix,
                         create_user_sol_account_ix,
                         place_bet_ix,

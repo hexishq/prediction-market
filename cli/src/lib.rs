@@ -4,7 +4,6 @@ pub use command::*;
 use hexis_prediction_market_interface::Prediction;
 use {
     clap::{Parser, Subcommand},
-    hexis_prediction_market_interface::Prediction,
     solana_cli_config::Config,
     solana_client::rpc_client::RpcClient,
     solana_commitment_config::CommitmentConfig,
@@ -163,16 +162,21 @@ fn read_prediction_market_account(account_data: &[u8]) -> Prediction {
         gamble_token_b_mint: account_data[64..96]
             .try_into()
             .expect("Failed to read gamble token B mint"),
-        total_amount: u64::from_le_bytes(
+        total_token_a: u64::from_le_bytes(
             account_data[96..104]
                 .try_into()
                 .expect("Failed to read total_amount"),
         ),
+        total_token_b: u64::from_le_bytes(
+            account_data[104..112]
+                .try_into()
+                .expect("Failed to read total_token_b"),
+        ),
         winner: u8::from_le_bytes(
-            account_data[104..105]
+            account_data[112..113]
                 .try_into()
                 .expect("Failed to read winner"),
         ),
-        padding: account_data[105..112].try_into().expect("Missing padding"),
+        padding: account_data[113..120].try_into().expect("Missing padding"),
     }
 }
