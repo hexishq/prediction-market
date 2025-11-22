@@ -9,7 +9,7 @@ use {
         instruction::{Seed, Signer},
         log::sol_log,
         program_error::ProgramError,
-        pubkey::{create_program_address, find_program_address, Pubkey},
+        pubkey::{find_program_address, Pubkey},
         sysvars::{rent::Rent, Sysvar},
         ProgramResult,
     },
