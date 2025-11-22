@@ -237,14 +237,6 @@ fn place_bet(
         return Err(ProgramError::IncorrectProgramId);
     }
 
-    let mut prediction_data = prediction_account.try_borrow_mut_data()?;
-
-    let prediction =
-        bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
-            sol_log(&format!("Failed to deserialize prediction data: {e}"));
-            ProgramError::InvalidAccountData
-        })?;
-
     let creator_fee = amount
         .checked_mul(FEE_BPS)
         .ok_or(ProgramError::ArithmeticOverflow)?
@@ -275,16 +267,7 @@ fn place_bet(
     }
     .invoke()?;
 
-    // Checking after transfers to avoid duplicate reference borrow
-    let creator_sol_account_data = creator_sol_account.try_borrow_data()?;
-    let protocol_fee_account_data = protocol_fee_account.try_borrow_data()?;
-
-    if AtaAccessor::get_owner(&creator_sol_account_data) != prediction.creator {
-        sol_log("Creator SOL account isn't owned by the prediction creator");
-        return Err(ProgramError::IllegalOwner);
-    }
-
-    if AtaAccessor::get_owner(&protocol_fee_account_data) != FEE_WALLET {
+    if AtaAccessor::get_owner(&protocol_fee_account.try_borrow_data()?)? != FEE_WALLET {
         sol_log("Protocol fee account isn't owned by the fee wallet");
         return Err(ProgramError::IllegalOwner);
     }
@@ -293,33 +276,52 @@ fn place_bet(
         .checked_add(protocol_fee)
         .ok_or(ProgramError::ArithmeticOverflow)?;
 
-    let mint_to_transfer = if option == 1 {
-        prediction.gamble_token_a_mint
-    } else {
-        prediction.gamble_token_b_mint
+    let mint_to_transfer = {
+        let mut prediction_data = prediction_account.try_borrow_mut_data()?;
+
+        let prediction =
+            bytemuck::try_from_bytes_mut::<Prediction>(&mut prediction_data).map_err(|e| {
+                sol_log(&format!("Failed to deserialize prediction data: {e}"));
+                ProgramError::InvalidAccountData
+            })?;
+
+        if AtaAccessor::get_owner(&creator_sol_account.try_borrow_data()?)? != prediction.creator {
+            sol_log("Creator SOL account isn't owned by the prediction creator");
+            return Err(ProgramError::IllegalOwner);
+        }
+
+        if prediction.winner != 0 {
+            sol_log("Prediction has already ended");
+            return Err(ProgramError::InvalidAccountData);
+        }
+
+        let net_amount = amount
+            .checked_sub(total_fee)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
+
+        // This works because token has equivalent decimals, so 1 lamport = token (for the program)
+        if option == 1 {
+            prediction.total_token_a = prediction
+                .total_token_a
+                .checked_add(net_amount)
+                .ok_or(ProgramError::ArithmeticOverflow)?;
+        } else {
+            prediction.total_token_b = prediction
+                .total_token_b
+                .checked_add(net_amount)
+                .ok_or(ProgramError::ArithmeticOverflow)?;
+        }
+
+        if option == 1 {
+            prediction.gamble_token_a_mint
+        } else {
+            prediction.gamble_token_b_mint
+        }
     };
 
-    if prediction.winner != 0 {
-        sol_log("Prediction has already ended");
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    if [1, 2].contains(&option) == false {
+    if ![1, 2].contains(&option) {
         sol_log("Invalid option");
         return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let user_vault_data = user_token_account.try_borrow_data()?;
-    let user_sol_account_data = user_sol_account.try_borrow_data()?;
-
-    if AtaAccessor::get_mint(&user_vault_data) != mint_to_transfer {
-        sol_log("User token account mint does not match the selected option");
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    if AtaAccessor::get_amount(&user_sol_account_data) < amount {
-        sol_log("Insufficient SOL balance in user account");
-        return Err(ProgramError::InsufficientFunds);
     }
 
     // Sending SOL from user to pool vault
@@ -346,21 +348,17 @@ fn place_bet(
     }
     .invoke()?;
 
-    let net_amount = amount
-        .checked_sub(total_fee)
-        .ok_or(ProgramError::ArithmeticOverflow)?;
+    let user_vault_data = user_token_account.try_borrow_data()?;
+    let user_sol_account_data = user_sol_account.try_borrow_data()?;
 
-    // This works because token has equivalent decimals, so 1 lamport = token (for the program)
-    if option == 1 {
-        prediction
-            .total_token_a
-            .checked_add(net_amount)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
-    } else {
-        prediction
-            .total_token_b
-            .checked_add(net_amount)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
+    if AtaAccessor::get_mint(&user_vault_data)? != mint_to_transfer {
+        sol_log("User token account mint does not match the selected option");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if AtaAccessor::get_amount(&user_sol_account_data)? < amount {
+        sol_log("Insufficient SOL balance in user account");
+        return Err(ProgramError::InsufficientFunds);
     }
 
     Ok(())
@@ -427,7 +425,7 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
         .next()
         .ok_or(ProgramError::InvalidAccountData)?;
 
-    let user_token_account_mint = AtaAccessor::get_mint(&user_token_account.try_borrow_data()?);
+    let user_token_account_mint = AtaAccessor::get_mint(&user_token_account.try_borrow_data()?)?;
     let prediction_data = prediction_account.try_borrow_data()?;
 
     let prediction = bytemuck::try_from_bytes::<Prediction>(&prediction_data).map_err(|e| {
@@ -459,7 +457,7 @@ fn claim(accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    let user_token_amount = AtaAccessor::get_amount(&user_token_account.try_borrow_data()?);
+    let user_token_amount = AtaAccessor::get_amount(&user_token_account.try_borrow_data()?)?;
     let winner_token_amount = if prediction.winner == 1 {
         prediction.total_token_a
     } else {
