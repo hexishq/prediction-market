@@ -24,7 +24,7 @@ const TOKEN_PROGRAM_2022_ID: Pubkey =
 
 const ASSOCIATED_TOKEN_PROGRAM_ID: Pubkey = spl_associated_token_account::ID;
 
-const PROGRAM_ID: Pubkey = Pubkey::from_str_const("6w3daRgCgWgbvkTCXgzP5X3qYXYABpiiFWgLU6HfeJPw");
+const PROGRAM_ID: Pubkey = Pubkey::from_str_const("566Mp4T5GhxgEcS9hubpQeJhLwkyupWJzNgeVmdcPUV4");
 
 #[derive(Debug, Parser)]
 #[command(
@@ -110,7 +110,11 @@ pub fn run(args: Args) -> CliResult<()> {
         custom => custom,
     };
 
-    let client = RpcClient::new_with_timeout(url.to_string(), Duration::from_secs(90));
+    let client = RpcClient::new_with_timeout_and_commitment(
+        url.to_string(),
+        Duration::from_secs(90),
+        solana_client::rpc_config::CommitmentConfig::processed(),
+    );
 
     let keypair = read_keypair_file(&args.keypair)
         .map_err(|e| CliError::CommandExecution(format!("Failed to load keypair: {}", e)))?;
