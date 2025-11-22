@@ -1,9 +1,5 @@
-use {
-    clap::Parser,
-    prediction_market_cli::{run, Args, CliError},
-    solana_cli_config::{Config, CONFIG_FILE},
-    std::sync::Arc,
-};
+use clap::Parser;
+use prediction_market_cli::{run, Args, CliError};
 
 fn main() -> Result<(), CliError> {
     tracing_subscriber::fmt()
@@ -15,23 +11,7 @@ fn main() -> Result<(), CliError> {
 
     let args = Args::parse();
 
-    let config_file = CONFIG_FILE.as_ref().ok_or(CliError::ConfigFilePathError)?;
-
-    let mut config = Config::load(config_file)?;
-
-    if let Some(custom_json_rpc_url) = args.url {
-        config.json_rpc_url = custom_json_rpc_url;
-    }
-
-    if let Some(custom_keypair_path) = args.keypair {
-        config.keypair_path = custom_keypair_path;
-    }
-
-    config.save(config_file)?;
-
-    let config = Arc::new(config);
-
-    run(config, args.command)?;
+    run(args)?;
 
     Ok(())
 }
