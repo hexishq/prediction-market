@@ -1,16 +1,13 @@
 mod command;
 
 pub use command::*;
-use hexis_prediction_market_interface::Prediction;
 use {
     clap::{Parser, Subcommand},
     hexis_prediction_market_interface::Prediction,
-    solana_cli_config::Config,
     solana_client::rpc_client::RpcClient,
-    solana_commitment_config::CommitmentConfig,
     solana_keypair::read_keypair_file,
     solana_pubkey::Pubkey,
-    std::{str::FromStr, sync::Arc, time::Duration},
+    std::time::Duration,
 };
 
 const DEVNET: &str = "https://api.devnet.solana.com";
@@ -27,7 +24,7 @@ const TOKEN_PROGRAM_2022_ID: Pubkey =
 
 const ASSOCIATED_TOKEN_PROGRAM_ID: Pubkey = spl_associated_token_account::ID;
 
-const PROGRAM_ID: Pubkey = Pubkey::from_str_const("6w3daRgCgWgbvkTCXgzP5X3qYXYABpiiFWgLU6HfeJPw"); // Placeholder
+const PROGRAM_ID: Pubkey = Pubkey::from_str_const("566Mp4T5GhxgEcS9hubpQeJhLwkyupWJzNgeVmdcPUV4");
 
 #[derive(Debug, Parser)]
 #[command(
@@ -38,12 +35,12 @@ const PROGRAM_ID: Pubkey = Pubkey::from_str_const("6w3daRgCgWgbvkTCXgzP5X3qYXYAB
 )]
 pub struct Args {
     /// RPC endpoint URL or preset (mainnet-beta, devnet, localhost)
-    #[arg(short = 'u', long, global = true)]
-    pub url: Option<String>,
+    #[arg(short = 'u', long)]
+    pub url: String,
 
     /// Path to the keypair file
-    #[arg(short = 'k', long, global = true)]
-    pub keypair: Option<String>,
+    #[arg(short)]
+    pub keypair: String,
 
     #[command(subcommand)]
     pub command: Command,
@@ -90,9 +87,6 @@ pub enum Command {
 
 #[derive(thiserror::Error, Debug)]
 pub enum CliError {
-    #[error("unable to get config file path")]
-    ConfigFilePathError,
-
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
@@ -102,35 +96,32 @@ pub enum CliError {
     #[error("RPC client error: {0}")]
     RpcClient(#[from] solana_client::client_error::ClientError),
 
-    #[error("commitment config error: {0}")]
-    CommitmentConfig(#[from] solana_commitment_config::ParseCommitmentLevelError),
-
     #[error("command execution error: {0}")]
     CommandExecution(String),
 }
 
 pub type CliResult<T> = Result<T, CliError>;
 
-pub fn run(config: Arc<Config>, command: Command) -> CliResult<()> {
-    let url = match config.json_rpc_url.as_str() {
-        "mainnet-beta" | "mainnet" | "m" => MAINNET_BETA.to_string(),
-        "devnet" | "d" => DEVNET.to_string(),
-        "localhost" | "l" => LOCALHOST.to_string(),
-        custom => custom.to_string(),
+pub fn run(args: Args) -> CliResult<()> {
+    let url = match args.url.as_str() {
+        "mainnet-beta" | "mainnet" | "m" => MAINNET_BETA,
+        "devnet" | "d" => DEVNET,
+        "localhost" | "l" => LOCALHOST,
+        custom => custom,
     };
 
     let client = RpcClient::new_with_timeout_and_commitment(
-        url,
+        url.to_string(),
         Duration::from_secs(90),
-        CommitmentConfig::from_str(&config.commitment)?,
+        solana_client::rpc_config::CommitmentConfig::processed(),
     );
 
-    let keypair = read_keypair_file(&config.keypair_path)
+    let keypair = read_keypair_file(&args.keypair)
         .map_err(|e| CliError::CommandExecution(format!("Failed to load keypair: {}", e)))?;
 
     let context = CommandContext { keypair, client };
 
-    match command {
+    match args.command {
         Command::Create => {
             create::CreateCommand::new().run(context)?;
         }
@@ -163,16 +154,22 @@ fn read_prediction_market_account(account_data: &[u8]) -> Prediction {
         gamble_token_b_mint: account_data[64..96]
             .try_into()
             .expect("Failed to read gamble token B mint"),
-        total_amount: u64::from_le_bytes(
+        total_token_a: u64::from_le_bytes(
             account_data[96..104]
                 .try_into()
                 .expect("Failed to read total_amount"),
         ),
+        total_token_b: u64::from_le_bytes(
+            account_data[104..112]
+                .try_into()
+                .expect("Failed to read total_token_b"),
+        ),
         winner: u8::from_le_bytes(
-            account_data[104..105]
+            account_data[112..113]
                 .try_into()
                 .expect("Failed to read winner"),
         ),
-        padding: account_data[105..112].try_into().expect("Missing padding"),
+        bump: u8::from_le_bytes(account_data[113..114].try_into().expect("Missing bump")),
+        padding: account_data[114..120].try_into().expect("Missing padding"),
     }
 }
